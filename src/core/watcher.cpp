@@ -78,6 +78,12 @@ void handler(int) {
     shutdown_requested = true;
 }
 
+Watcher* cwatcher = nullptr;
+
+void handler(int) {
+    if (cwatcher) cwatcher->stop();
+}
+
 int main() {
     Watcher watchr("./");
     struct sigaction sa{};
