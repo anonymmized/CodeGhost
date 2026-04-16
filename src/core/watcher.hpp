@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <thread>
 #include <functional>
 
 class Watcher {
@@ -15,4 +16,5 @@ class Watcher {
         int inotify_id = -1;
         bool running = false;
         EventCallback callback;
+        std::thread worker;
 };
