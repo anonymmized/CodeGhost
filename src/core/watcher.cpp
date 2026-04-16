@@ -3,78 +3,97 @@
 #include <unistd.h>
 #include <sys/inotify.h>
 #include <cstring>
+#include <cerrno>
+#include <chrono>
 #include <csignal>
 
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
-//Watcher::~Watcher() { stop(); }
-void Watcher::setCallback(EventCallback cb) { callback = std::move(cb); }
+void Watcher::setCallback(EventCallback cb) {
+    std::lock_guard<std::mutex> lock(callback_mutex);
+    callback = std::move(cb);
+}
+Watcher::~Watcher() { stop(); }
 void Watcher::stop() { 
-    running = false; 
-    if (inotify_id != -1) close(inotify_id);
+    if (!running.exchange(false)) return;
     if (worker.joinable()) worker.join();
 }
 
 void Watcher::start() {
-    running = true;
+    if (running.exchange(true)) return;
     worker = std::thread([this]() {
-        char buf[4096];
-        inotify_id = inotify_init();
-        if (inotify_id == -1) {
+        int fd = inotify_init1(IN_NONBLOCK);
+        if (fd == -1) {
             std::cerr << "Failed to initialize inotify: " << strerror(errno) << '\n';
+            running = false;
             return;
         }
-        int wd = inotify_add_watch(inotify_id, watch_path.c_str(), IN_CLOSE_WRITE | IN_CREATE | IN_DELETE);
-        if (wd <= 0) {
-            perror("inotify_add_watch");
+        int wd = inotify_add_watch(fd, watch_path.c_str(), IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
+        if (wd == -1) {
+            std::cerr << "Failed to add watch: " << strerror(errno) << '\n';
+            close(fd);
+            running = false;
             return;
         }
+        alignas(inotify_event) char buf[4096];
         while (running) {
-            ssize_t len = read(inotify_id, buf, sizeof(buf));
+            ssize_t len = read(fd, buf, sizeof(buf));
             if (len < 0) {
-                if (errno == EINTR) break;
-                perror("read");
-                continue;
+                if (errno == EAGAIN) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    continue;
+                }
+                if (errno == EINTR) continue;
+                std::cerr << "read error: " << strerror(errno) << '\n';
+                break;
             }
             ssize_t i = 0;
             while (i < len) {
-                auto* event = reinterpret_cast<inotify_event*>(&buf[i]);
+                auto* event = reinterpret_cast<inotify_event*>(buf + i);
                 if (event->len > 0) {
-                    std::string file = event->name;
-                    std::string type;
-                    if (event->mask & IN_CLOSE_WRITE) type = "WRITE";
-                    else if (event->mask & IN_MODIFY) type = "MODIFY";
-                    else if (event->mask & IN_CREATE) type = "CREATE";
-                    else if (event->mask & IN_DELETE) type = "DELETE";
-                    else if (event->mask & IN_MOVED_TO) type = "MOVE";
-                    if (!type.empty()) {
-                        std::cout << "|Watcher| " << type << ": " << file << '\n';
-                        if (callback) callback(file, type);
+                    std::string filename = event->name;
+                    EventCallback cb_copy;
+                    {
+                        std::lock_guard<std::mutex> lock(callback_mutex);
+                        cb_copy = callback;
+                    }
+                    if (cb_copy) {
+                        if (event->mask & IN_CREATE) cb_copy(name, "CREATE");
+                        if (event->mask & IN_DELETE) cb_copy(name, "DELETE");
+                        if (event->mask & IN_CLOSE_WRITE) cb_copy(name, "MODIFY");
+                        if (event->mask & IN_MOVED_TO) cb_copy(name, "MOVED_TO");
+                        if (event->mask & IN_MOVED_FROM) cb_copy(name, "MOVED_FROM");
                     }
                 }
                 i += sizeof(inotify_event) + event->len;
             }
         }
-        inotify_rm_watch(inotify_id, wd);
-        close(inotify_id);
+        inotify_rm_watch(fd, wd);
+        close(fd);
     });
 }
 
-Watcher* cwatcher = nullptr;
+std::atomic<bool> shutdown_requested{false};
 
 void handler(int) {
-    if (cwatcher) cwatcher->stop();
+    shutdown_requested = true;
 }
 
 int main() {
     Watcher watchr("./");
-    cwatcher = &watchr;
     struct sigaction sa{};
     sa.sa_handler = handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
-    watchr.setCallback([](const std::string& path, const std::string& type) { std::cout << "|Callback| " << type << " -> " << path << '\n'; });
+    watchr.setCallback([](const std::string& path, const std::string& type) { 
+            std::cout << type << " -> " << path << '\n';
+    });
     watchr.start();
-    pause();
+    std::cout << "[Main] Watcher is running. Press Ctrl+C to stop.\n";
+    while (!shutdown_requested) {
+        std::this_thread::sleep_for(std::chrono::seconds(100));
+    }
+    std::cout << "\n[Main] Shutting down...\n";
+    watchr.stop();
     return 0;
 }
