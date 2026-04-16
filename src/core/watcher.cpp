@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cerrno>
 #include <chrono>
+#include <mutex>
 #include <csignal>
 
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
@@ -57,11 +58,11 @@ void Watcher::start() {
                         cb_copy = callback;
                     }
                     if (cb_copy) {
-                        if (event->mask & IN_CREATE) cb_copy(name, "CREATE");
-                        if (event->mask & IN_DELETE) cb_copy(name, "DELETE");
-                        if (event->mask & IN_CLOSE_WRITE) cb_copy(name, "MODIFY");
-                        if (event->mask & IN_MOVED_TO) cb_copy(name, "MOVED_TO");
-                        if (event->mask & IN_MOVED_FROM) cb_copy(name, "MOVED_FROM");
+                        if (event->mask & IN_CREATE) cb_copy(filename, "CREATE");
+                        if (event->mask & IN_DELETE) cb_copy(filename, "DELETE");
+                        if (event->mask & IN_CLOSE_WRITE) cb_copyfile(name, "MODIFY");
+                        if (event->mask & IN_MOVED_TO) cb_copy(filename, "MOVED_TO");
+                        if (event->mask & IN_MOVED_FROM) cb_copy(filename, "MOVED_FROM");
                     }
                 }
                 i += sizeof(inotify_event) + event->len;
@@ -78,12 +79,6 @@ void handler(int) {
     shutdown_requested = true;
 }
 
-Watcher* cwatcher = nullptr;
-
-void handler(int) {
-    if (cwatcher) cwatcher->stop();
-}
-
 int main() {
     Watcher watchr("./");
     struct sigaction sa{};
@@ -97,7 +92,7 @@ int main() {
     watchr.start();
     std::cout << "[Main] Watcher is running. Press Ctrl+C to stop.\n";
     while (!shutdown_requested) {
-        std::this_thread::sleep_for(std::chrono::seconds(100));
+        std::this_thread::sleep_for(std::chrono::seconds(200));
     }
     std::cout << "\n[Main] Shutting down...\n";
     watchr.stop();
