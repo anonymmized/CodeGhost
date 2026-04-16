@@ -3,11 +3,12 @@
 #include <unistd.h>
 #include <sys/inotify.h>
 #include <cstring>
+#include <csignal>
 
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 //Watcher::~Watcher() { stop(); }
 void Watcher::setCallback(EventCallback cb) { callback = std::move(cb); }
-
+void Watcher::stop() { running = false; }
 void Watcher::start() {
     std::cout << "Watcher starting for path: " << watch_path << '\n';
     inotify_id = inotify_init();
@@ -16,11 +17,17 @@ void Watcher::start() {
         return;
     }
     int wd = inotify_add_watch(inotify_id, watch_path.c_str(), IN_CLOSE_WRITE | IN_CREATE | IN_DELETE);
+    if (wd <= 0) {
+        perror("inotify_add_watch");
+        return;
+    }
+    std::cout << "Watching " << watch_path << " (wd:" << wd << ")\n";
     char buf[4096];
     running = true;
     while (running) {
         ssize_t len = read(inotify_id, buf, sizeof(buf));
-        if (len <= 0) {
+        if (len < 0) {
+            if (errno == EINTR) break;
             perror("read");
             continue;
         }
@@ -47,8 +54,20 @@ void Watcher::start() {
     close(inotify_id);
 }
 
+Watcher* cwatcher = nullptr;
+
+void handler(int) {
+    if (cwatcher) cwatcher->stop();
+}
+
 int main() {
     Watcher watchr("./");
+    cwatcher = &watchr;
+    struct sigaction sa{};
+    sa.sa_handler = handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
     watchr.setCallback([](const std::string& path, const std::string& type) { std::cout << "|Callback| " << type << " -> " << path << '\n'; });
     watchr.start();
     return 0;
