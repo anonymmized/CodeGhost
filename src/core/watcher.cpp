@@ -7,6 +7,15 @@
 #include <chrono>
 #include <mutex>
 #include <csignal>
+#include <unordered_map>
+
+bool shouldIgnoreFile(const std::string& name) {
+    if (name.empty()) return true;
+    if (name.starts_with(".#")) return true;
+    if (name.ends_with("~") || name.ends_with(".swp") || name.ends_with(".swo") || name.ends_with(".tmp")) return true;
+    if (name[0] == '.') return true;
+    return false;
+}
 
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 void Watcher::setCallback(EventCallback cb) {
@@ -28,7 +37,7 @@ void Watcher::start() {
             running = false;
             return;
         }
-        int wd = inotify_add_watch(fd, watch_path.c_str(), IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
+        int wd = inotify_add_watch(fd, watch_path.c_str(), IN_CLOSE_WRITE);
         if (wd == -1) {
             std::cerr << "Failed to add watch: " << strerror(errno) << '\n';
             close(fd);
@@ -36,6 +45,8 @@ void Watcher::start() {
             return;
         }
         alignas(inotify_event) char buf[4096];
+        std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;
+        const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
             ssize_t len = read(fd, buf, sizeof(buf));
             if (len < 0) {
@@ -52,18 +63,29 @@ void Watcher::start() {
                 auto* event = reinterpret_cast<inotify_event*>(buf + i);
                 if (event->len > 0) {
                     std::string filename = event->name;
+                    if (shouldIgnoreFile(filename)) {
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    if (!(event->mask & IN_CLOSE_WRITE)) {
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    auto now = std::chrono::steady_clock::now();
+                    auto it = last_event_time.find(filename);
+                    if (it != last_event_time.end()) {
+                        if (now - it->second < debounce_window) {
+                            i += sizeof(inotify_event) + event->len;
+                            continue;
+                        }
+                    }
                     EventCallback cb_copy;
                     {
                         std::lock_guard<std::mutex> lock(callback_mutex);
                         cb_copy = callback;
                     }
-                    if (cb_copy) {
-                        if (event->mask & IN_CREATE) cb_copy(filename, "CREATE");
-                        if (event->mask & IN_DELETE) cb_copy(filename, "DELETE");
-                        if (event->mask & IN_CLOSE_WRITE) cb_copyfile(name, "MODIFY");
-                        if (event->mask & IN_MOVED_TO) cb_copy(filename, "MOVED_TO");
-                        if (event->mask & IN_MOVED_FROM) cb_copy(filename, "MOVED_FROM");
-                    }
+                    if (cb_copy) cb_copy(filename, "MODIFIED");
+                    last_event_time[filename] = now;
                 }
                 i += sizeof(inotify_event) + event->len;
             }
