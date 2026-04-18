@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cerrno>
 #include <chrono>
+#include <mutex>
 #include <csignal>
 #include <unordered_map>
 
@@ -113,7 +114,7 @@ int main() {
     watchr.start();
     std::cout << "[Main] Watcher is running. Press Ctrl+C to stop.\n";
     while (!shutdown_requested) {
-        std::this_thread::sleep_for(std::chrono::seconds(100));
+        std::this_thread::sleep_for(std::chrono::seconds(200));
     }
     std::cout << "\n[Main] Shutting down...\n";
     watchr.stop();
