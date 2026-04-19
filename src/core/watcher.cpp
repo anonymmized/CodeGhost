@@ -1,4 +1,5 @@
 #include "watcher.hpp"
+#include "indexer.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <sys/inotify.h>
@@ -8,6 +9,8 @@
 #include <mutex>
 #include <csignal>
 #include <unordered_map>
+#include <filesystem>
+#include <thread>
 
 bool shouldIgnoreFile(const std::string& name) {
     if (name.empty()) return true;
@@ -84,7 +87,10 @@ void Watcher::start() {
                         std::lock_guard<std::mutex> lock(callback_mutex);
                         cb_copy = callback;
                     }
-                    if (cb_copy) cb_copy(filename, "MODIFIED");
+                    if (cb_copy) {
+                        std::string full_path = (std::filesystem::path(watch_path) / filename).string(); 
+                        cb_copy(full_path, "MODIFIED");
+                    }
                     last_event_time[filename] = now;
                 }
                 i += sizeof(inotify_event) + event->len;
@@ -109,7 +115,10 @@ int main() {
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
     watchr.setCallback([](const std::string& path, const std::string& type) { 
-            std::cout << type << " -> " << path << '\n';
+            auto changes = mainIndexer(path);
+            for (auto& c : changes) {
+                std::cout << c.file << " [" << c.block_index << "]\n";
+            }
     });
     watchr.start();
     std::cout << "[Main] Watcher is running. Press Ctrl+C to stop.\n";

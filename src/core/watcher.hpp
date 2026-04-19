@@ -3,6 +3,7 @@
 #include <thread>
 #include <atomic>
 #include <functional>
+#include <mutex>
 
 class Watcher {
     public:
@@ -14,7 +15,6 @@ class Watcher {
         void setCallback(EventCallback cb);
     private:
         std::string watch_path;
-        int inotify_id = -1;
         std::atomic<bool> running{false};
         EventCallback callback;
         std::mutex callback_mutex;

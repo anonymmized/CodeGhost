@@ -3,25 +3,15 @@
 #include <xxhash.h>
 #include <string>
 #include <algorithm>
-#include <iostream>
 #include <unordered_map>
-
-struct Change {
-    std::string file;
-    size_t block_index;
-    std::string old_content;
-    std::string new_content;
-};
-
-struct FileState {
-    std::vector<uint64_t> hashes;
-    std::vector<std::string> blocks;
-};
+#include <mutex>
+#include "indexer.hpp"
 
 uint64_t hashBlock(const std::string& block) {
     return XXH3_64bits(block.data(), block.size());
 }
 
+static std::mutex state_mutex;
 static std::unordered_map<std::string, FileState> state;
 
 std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_t block_size) {
@@ -45,13 +35,13 @@ std::vector<Change> mainIndexer(const std::string& filename) {
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(infile, line)) lines.push_back(line);
-    infile.close();
     std::vector<std::string> blocks = makeBlocks(lines, 5);
     std::vector<uint64_t> new_hashes;
     new_hashes.reserve(blocks.size());
     for (const auto& b : blocks) {
         new_hashes.push_back(hashBlock(b));
     }
+    std::lock_guard<std::mutex> lock(state_mutex);
     auto& old = state[filename];
     std::vector<Change> changes;
     size_t max_len = std::max(old.hashes.size(), new_hashes.size());
