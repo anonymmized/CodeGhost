@@ -28,8 +28,7 @@ void add_watch(int fd, const std::string& path, std::unordered_map<int, std::str
     if (wd >= 0) {
         wd_to_path[wd] = path;
     } else {
-        std::cerr << "Failed to add watch for " << path
-                  << ": " << strerror(errno) << "\n";
+        std::cerr << "Failed to add watch for " << path << ": " << strerror(errno) << "\n";
     }
 }
 
@@ -89,20 +88,21 @@ void Watcher::start() {
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
-                std::string base = it_wd->second;
-                std::string full_path = base;
-                if (event->len > 0) {
-                    std::string filename = event->name;
-                    full_path += "/" + filename;
-                    if ((event->mask & IN_ISDIR) &&
-                        (event->mask & (IN_CREATE | IN_MOVED_TO))) {
-                        add_watch(fd, full_path, wd_to_path);
-                        for (const auto& entry : fs::recursive_directory_iterator(full_path)) {
-                            if (entry.is_directory()) {
-                                add_watch(fd, entry.path().string(), wd_to_path);
-                            }
+                std::string full_path = it_wd->second;
+                std::string filename;
+                if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
+                    add_watch(fd, full_path, wd_to_path);
+                    for (const auto& entry : fs::recursive_directory_iterator(full_path)) {
+                        if (entry.is_directory()) {
+                            add_watch(fd, entry.path().string(), wd_to_path);
                         }
                     }
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
+                if (event->len > 0) {
+                    filename = event->name;
+                    full_path += "/" + filename;
                     if (shouldIgnoreFile(filename)) {
                         i += sizeof(inotify_event) + event->len;
                         continue;
@@ -124,12 +124,9 @@ void Watcher::start() {
                         std::lock_guard<std::mutex> lock(callback_mutex);
                         cb_copy = callback;
                     }
-                    if (cb_copy) {
-                        cb_copy(full_path, "MODIFIED");
-                    }
+                    if (cb_copy) cb_copy(full_path, "MODIFIED");
                     last_event_time[full_path] = now;
                 }
-
                 i += sizeof(inotify_event) + event->len;
             }
         }
