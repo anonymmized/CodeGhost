@@ -4,5 +4,5 @@
 
 class Searcher {
     public:
-        std::vector<Change> find(const std::string& query);
+        std::vector<Change> find(const std::vector<Change>& changes, const std::string& query);
 };
