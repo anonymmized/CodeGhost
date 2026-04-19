@@ -1,18 +1,15 @@
 #include <fstream>
+#include <filesystem>
 #include <vector>
 #include <xxhash.h>
 #include <string>
 #include <algorithm>
-#include <unordered_map>
 #include <mutex>
 #include "indexer.hpp"
 
 uint64_t hashBlock(const std::string& block) {
     return XXH3_64bits(block.data(), block.size());
 }
-
-static std::mutex state_mutex;
-static std::unordered_map<std::string, FileState> state;
 
 std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_t block_size) {
     std::vector<std::string> blocks;
@@ -27,15 +24,31 @@ std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_
     return blocks;
 }
 
-std::vector<Change> mainIndexer(const std::string& filename) {
+std::vector<Change> Indexer::process(const std::string& filename, size_t block_size) {
+    if (!std::filesystem::exists(filename)) {
+        std::lock_guard<std::mutex> lock(state_mutex);
+        state.erase(filename);
+        return {};
+    }
     std::ifstream infile(filename);
     if (!infile.is_open()) {
         return {};
     }
+    char buf_check[512];
+    infile.read(buf_check, sizeof(buf_check));
+    for (std::streamsize i = 0; i < infile.gcount(); ++i) {
+        if (buf_check[i] == '\0') { 
+            std::lock_guard<std::mutex> lock(state_mutex);
+            state.erase(filename);
+            return {};
+        }
+    }
+    infile.clear();
+    infile.seekg(0);
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(infile, line)) lines.push_back(line);
-    std::vector<std::string> blocks = makeBlocks(lines, 5);
+    std::vector<std::string> blocks = makeBlocks(lines, block_size);
     std::vector<uint64_t> new_hashes;
     new_hashes.reserve(blocks.size());
     for (const auto& b : blocks) {

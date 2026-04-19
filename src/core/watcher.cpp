@@ -70,6 +70,7 @@ void Watcher::start() {
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
+                    std::string full_path = (std::filesystem::path(watch_path) / filename).string();
                     if (!(event->mask & IN_CLOSE_WRITE)) {
                         i += sizeof(inotify_event) + event->len;
                         continue;
@@ -88,7 +89,6 @@ void Watcher::start() {
                         cb_copy = callback;
                     }
                     if (cb_copy) {
-                        std::string full_path = (std::filesystem::path(watch_path) / filename).string(); 
                         cb_copy(full_path, "MODIFIED");
                     }
                     last_event_time[filename] = now;
@@ -114,8 +114,9 @@ int main() {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
-    watchr.setCallback([](const std::string& path, const std::string& type) { 
-            auto changes = mainIndexer(path);
+    Indexer indexer;
+    watchr.setCallback([&indexer](const std::string& path, const std::string& type) { 
+            auto changes = indexer.process(path);
             for (auto& c : changes) {
                 std::cout << c.file << " [" << c.block_index << "]\n";
             }
