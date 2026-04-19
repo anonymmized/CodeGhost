@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <thread>
 
-
 bool shouldIgnoreFile(const std::string& name) {
     if (name.empty()) return true;
     if (name.starts_with(".#")) return true;
@@ -89,7 +88,6 @@ void Watcher::start() {
                         std::lock_guard<std::mutex> lock(callback_mutex);
                         cb_copy = callback;
                     }
-
                     if (cb_copy) {
                         cb_copy(full_path, "MODIFIED");
                     }
