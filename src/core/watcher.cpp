@@ -97,15 +97,18 @@ void Watcher::start() {
                     continue;
                 }
                 std::string base_path = it_wd->second;
-                if ((event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
+                if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
                     std::string new_dir = base_path + "/" + event->name;
                     add_watch(fd, new_dir, wd_to_path);
-                    for (const auto& entry : fs::recursive_directory_iterator(new_dir)) {
+                    std::error_code ec;
+                    for (const auto& entry : fs::recursive_directory_iterator(new_dir, ec)) {
+                        if (ec) break;
                         if (entry.is_directory()) {
                             add_watch(fd, entry.path().string(), wd_to_path);
                         }
                     }
                     i += sizeof(inotify_event) + event->len;
+                    continue;
                 }
                 if (event->len > 0) {
                     std::string filename = event->name;
