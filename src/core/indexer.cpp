@@ -8,16 +8,23 @@
 #include "indexer.hpp"
 
 uint64_t hashBlock(const std::string& block) {
-    // использую для сравнения блоков тк сильно быстрее строк 
+    // использую для сравнения блоков тк сильно быстрее строк
     return XXH3_64bits(block.data(), block.size());
+}
+
+void Indexer::remove(const std::string& path) {
+    auto it = state.find(path);
+    if (it != state.end()) {
+        state.erase(it);
+    }
 }
 
 std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_t block_size) {
     std::vector<std::string> blocks;
     // тут я разбиваю файл на фиксированные блоки по 5 строк (пока фикс)
-    for (size_t i = 0; i < lines.size(); i += block_size) { // иду с шагом в размер блока 
+    for (size_t i = 0; i < lines.size(); i += block_size) { // иду с шагом в размер блока
         std::string block;
-        for (size_t j = i; j < i + block_size && j < lines.size(); j++) { // разбираю одну итерацию i 
+        for (size_t j = i; j < i + block_size && j < lines.size(); j++) { // разбираю одну итерацию i
             block += lines[j];
             block += '\n'; // нормализую формат тк в ином случае будет отличаться хеш
         }
@@ -41,13 +48,13 @@ std::vector<Change> Indexer::process(const std::string& filename, size_t block_s
     char buf_check[512];
     infile.read(buf_check, sizeof(buf_check));
     for (std::streamsize i = 0; i < infile.gcount(); ++i) {
-        if (buf_check[i] == '\0') { 
+        if (buf_check[i] == '\0') {
             std::lock_guard<std::mutex> lock(state_mutex);
             state.erase(filename);
             return {};
         }
     }
-    // в начало списка возвращаемся 
+    // в начало списка возвращаемся
     infile.clear();
     infile.seekg(0);
 
@@ -58,12 +65,12 @@ std::vector<Change> Indexer::process(const std::string& filename, size_t block_s
     std::vector<std::string> blocks = makeBlocks(lines, block_size);
     std::vector<uint64_t> new_hashes;
     new_hashes.reserve(blocks.size());
-    // каждый блок хешируем, состояние файла вроде получаются компактнее строк 
+    // каждый блок хешируем, состояние файла вроде получаются компактнее строк
     for (const auto& b : blocks) {
         new_hashes.push_back(hashBlock(b));
     }
     std::lock_guard<std::mutex> lock(state_mutex);
-    // сохраняем в переменной предыдущее состояние файла 
+    // сохраняем в переменной предыдущее состояние файла
     auto& old = state[filename];
     std::vector<Change> changes;
     // проходим по максимальной длине
@@ -73,7 +80,7 @@ std::vector<Change> Indexer::process(const std::string& filename, size_t block_s
         uint64_t old_h = (i < old.hashes.size()) ? old.hashes[i] : 0;
         uint64_t new_h = (i < new_hashes.size()) ? new_hashes[i] : 0;
         if (old_h != new_h) {
-            // детект изменений 
+            // детект изменений
             Change c;
             c.file = filename;
             c.block_index = i;

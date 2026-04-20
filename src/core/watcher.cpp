@@ -56,7 +56,7 @@ void Watcher::setCallback(EventCallback cb) {
     callback = std::move(cb);
 }
 Watcher::~Watcher() { stop(); }
-void Watcher::stop() { 
+void Watcher::stop() {
     // exchange(false) возвращает старое значение
     if (!running.exchange(false)) return;
     // ждем завершения worker потока
@@ -162,7 +162,7 @@ void Watcher::start() {
 std::atomic<bool> shutdown_requested{false};
 
 void handler(int) {
-    // что делать при ctrl+c 
+    // что делать при ctrl+c
     // ТУТ НЕЛЬЗЯ ДЕЛАТЬ СЛОЖНУЮ ЛОГИКУ ЗАПРЕЩАЮ
     shutdown_requested = true;
 }
@@ -177,8 +177,13 @@ int main() {
     sigaction(SIGINT, &sa, nullptr);
     Indexer indexer;
     // самая мозгоебская часть - связующее звено между вотчером и индексером
-    watchr.setCallback([&indexer](const std::string& path, const std::string& type) { 
-            // вотчер сообщает об изменении , а индексер вычисляет различия 
+    watchr.setCallback([&indexer](const std::string& path, const std::string& type) {
+            // вотчер сообщает об изменении , а индексер вычисляет различия
+            if (type == "DELETED") {
+                indexer.remove(path);
+                std::cout << path << " [" << type << "]\n";
+                return;
+            }
             auto changes = indexer.process(path);
             for (auto& c : changes) {
                 std::cout << c.file << " [" << c.block_index << "]\n";
