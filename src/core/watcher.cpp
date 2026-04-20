@@ -68,7 +68,7 @@ void Watcher::start() {
     worker = std::thread([this]() {
         int fd = inotify_init1(IN_NONBLOCK);
         if (fd == -1) {
-            std::cerr << "Failedd to initialize inotify: " << strerror(errno) << '\n';
+            std::cerr << "Failed to initialize inotify: " << strerror(errno) << '\n';
             running = false;
             return;
         }
@@ -113,6 +113,17 @@ void Watcher::start() {
                 if (event->len > 0) {
                     std::string filename = event->name;
                     if (shouldIgnoreFile(filename)) {
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
+                        std::string full_path = base_path + "/" + event->name;
+                        EventCallback cb_copy;
+                        {
+                            std::lock_guard<std::mutex> lock(callback_mutex);
+                            cb_copy = callback;
+                        }
+                        if (cb_copy) cb_copy(full_path, "DELETED");
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
