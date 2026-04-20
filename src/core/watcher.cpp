@@ -31,7 +31,8 @@ void add_watch(int fd, const std::string& path, std::unordered_map<int, std::str
     if (wd >= 0) {
         wd_to_path[wd] = path;
     } else {
-        std::cerr << "Failed to add watch for " << path << ": " << strerror(errno) << '\n';
+        std::cerr << "Failed to add watch for "
+                  << path << ": " << strerror(errno) << '\n';
     }
 }
 
