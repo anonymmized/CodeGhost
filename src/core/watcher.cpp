@@ -56,7 +56,7 @@ void Watcher::setCallback(EventCallback cb) {
     callback = std::move(cb);
 }
 Watcher::~Watcher() { stop(); }
-void Watcher::stop() { 
+void Watcher::stop() {
     // exchange(false) возвращает старое значение
     if (!running.exchange(false)) return;
     // ждем завершения worker потока
@@ -73,6 +73,7 @@ void Watcher::start() {
             return;
         }
         std::unordered_map<int, std::string> wd_to_path;
+        std::unordered_map<uint32_t, std::string> pending_moves;
         add_watch_recursive(fd, watch_path, wd_to_path);
         alignas(inotify_event) char buf[4096];
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;
@@ -116,7 +117,30 @@ void Watcher::start() {
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
-                    if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
+                    if (event->mask & IN_MOVED_FROM) {
+                        std::string full_path = base_path + "/" + event->name;
+                        pending_moves[event->cookie] = full_path;
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    if (event->mask & IN_MOVED_TO) {
+                        std::string new_path = base_path + "/" + event->name;
+                        EventCallback cb_copy;
+                        {
+                            std::lock_guard<std::mutex> lock(callback_mutex);
+                            cb_copy = callback;
+                        }
+
+                        auto it = pending_moves.find(event->cookie);
+                        if (it != pending_moves.end()) {
+                            std::string old_path = it->second;
+                            if (cb_copy) cb_copy(old_path + "|" + new_path, "RENAMED");
+                            pending_moves.erase(it);
+                        }
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    if (event->mask & IN_DELETE) {
                         std::string full_path = base_path + "/" + event->name;
                         EventCallback cb_copy;
                         {
@@ -162,7 +186,7 @@ void Watcher::start() {
 std::atomic<bool> shutdown_requested{false};
 
 void handler(int) {
-    // что делать при ctrl+c 
+    // что делать при ctrl+c
     // ТУТ НЕЛЬЗЯ ДЕЛАТЬ СЛОЖНУЮ ЛОГИКУ ЗАПРЕЩАЮ
     shutdown_requested = true;
 }
@@ -177,8 +201,20 @@ int main() {
     sigaction(SIGINT, &sa, nullptr);
     Indexer indexer;
     // самая мозгоебская часть - связующее звено между вотчером и индексером
-    watchr.setCallback([&indexer](const std::string& path, const std::string& type) { 
-            // вотчер сообщает об изменении , а индексер вычисляет различия 
+    watchr.setCallback([&indexer](const std::string& path, const std::string& type) {
+            // вотчер сообщает об изменении , а индексер вычисляет различия
+            if (type == "RENAMED") {
+                auto pos = path.find('|');
+                std::string old_path = path.substr(0, pos);
+                std::string new_path = path.substr(pos + 1);
+                indexer.rename(old_path, new_path);
+                return;
+            }
+            if (type == "DELETED") {
+                indexer.remove(path);
+                std::cout << path << " [" << type << "]\n";
+                return;
+            }
             auto changes = indexer.process(path);
             for (auto& c : changes) {
                 std::cout << c.file << " [" << c.block_index << "]\n";
