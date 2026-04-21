@@ -151,6 +151,9 @@ void Watcher::start() {
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
+		    if (event->mask & IS_IGNORED) {
+		      wd_to_path.erase(it_wd);
+		    }
                     if (!(event->mask & IN_CLOSE_WRITE)) {
                         i += sizeof(inotify_event) + event->len;
                         continue;
