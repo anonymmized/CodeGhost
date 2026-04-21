@@ -98,6 +98,24 @@ void Watcher::start() {
                     continue;
                 }
                 std::string base_path = it_wd->second;
+                if (event->mask & IN_IGNORED) {
+                    wd_to_path.erase(it_wd);
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
+                if (event->mask & IN_DELETE_SELF) {
+                    auto it = wd_to_path.begin();
+                    while (it != wd_to_path.end()) {
+                        if (it->second.starts_with(base_path)) {
+                            inotify_rm_watch(fd, it->first);
+                            it = wd_to_path.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
                 if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
                     std::string new_dir = base_path + "/" + event->name;
                     add_watch(fd, new_dir, wd_to_path);
