@@ -13,6 +13,7 @@ uint64_t hashBlock(const std::string& block) {
 }
 
 void Indexer::remove(const std::string& path) {
+    std::lock_guard<std::mutex> lock(state_mutex);
     auto it = state.find(path);
     if (it != state.end()) {
         state.erase(it);
@@ -20,6 +21,7 @@ void Indexer::remove(const std::string& path) {
 }
 
 void Indexer::rename(const std::string& old_path, const std::string& new_path) {
+    std::lock_guard<std::mutex> lock(state_mutex);
     auto it = state.find(old_path);
     if (it != state.end()) {
         state[new_path] = std::move(it->second);
