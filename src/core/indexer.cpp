@@ -19,6 +19,14 @@ void Indexer::remove(const std::string& path) {
     }
 }
 
+void Indexer::rename(const std::string& old_path, const std::string& new_path) {
+    auto it = state.find(old_path);
+    if (it != state.end()) {
+        state[new_path] = std::move(it->second);
+        state.erase(it);
+    }
+}
+
 std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_t block_size) {
     std::vector<std::string> blocks;
     // тут я разбиваю файл на фиксированные блоки по 5 строк (пока фикс)
