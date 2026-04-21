@@ -106,13 +106,21 @@ void Watcher::start() {
                 if (event->mask & IN_DELETE_SELF) {
                     auto it = wd_to_path.begin();
                     while (it != wd_to_path.end()) {
-                        if (it->second.starts_with(base_path)) {
+                        if (it->second.starts_with(base_path + "/")) {
                             inotify_rm_watch(fd, it->first);
                             it = wd_to_path.erase(it);
                         } else {
                             ++it;
                         }
                     }
+                    inotify_rm_watch(fd, event->wd);
+                    wd_to_path.erase(event->wd);
+                    EventCallback cb_copy;
+                    {
+                        std::lock_guard<std::mutex> lock(callback_mutex);
+                        cb_copy = callback;
+                    }
+                    if (cb_copy) cb_copy(base_path, "DELETED");
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
