@@ -97,23 +97,25 @@ void Watcher::start() {
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
-		std::string base_path = it_wd->second;
-		if (event->mask & IN_IGNORED) {
-		  wd_to_path.erase(it_wd);
-		  i += sizeof(inotify_event) + event->len;
-		  continue;
-		}
-		if (event->mask & IN_DELETE_SELF) {
-		  std::string full_path = base_path + "/" + event->name;
-		  EventCallback cb_copy;
-		  {
-		    std::lock_guard<std::mutex> lock(callback_mutex);
-		    cb_copy = callback;
-		  }
-		  if (cb_copy) cb_copy(full_path, "DELETED");
-		  i += sizeof(inotify_event) + event->len;
-		  continue;
-		}
+                std::string base_path = it_wd->second;
+                if (event->mask & IN_IGNORED) {
+                    wd_to_path.erase(it_wd);
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
+                if (event->mask & IN_DELETE_SELF) {
+                    auto it = wd_to_path.begin();
+                    while (it != wd_to_path.end()) {
+                        if (it->second.starts_with(base_path)) {
+                            inotify_rm_watch(fd, it->first);
+                            it = wd_to_path.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
                 if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
                     std::string new_dir = base_path + "/" + event->name;
                     add_watch(fd, new_dir, wd_to_path);
@@ -152,6 +154,25 @@ void Watcher::start() {
                             std::string old_path = it->second;
                             if (cb_copy) cb_copy(old_path + "|" + new_path, "RENAMED");
                             pending_moves.erase(it);
+                        }
+                        i += sizeof(inotify_event) + event->len;
+                        continue;
+                    }
+                    if (event->mask & IN_DELETE) {
+                        std::string full_path = base_path + "/" + event->name;
+                        EventCallback cb_copy;
+                        {
+                            std::lock_guard<std::mutex> lock(callback_mutex);
+                            cb_copy = callback;
+                        }
+                        if (cb_copy) cb_copy(full_path, "DELETED");
+                        auto it = pending_moves.begin();
+                        while (it != pending_moves.end()) {
+                            if (it->second.path == full_path) {
+                                pending_moves.erase(it);
+                                break;
+                            }
+                            ++it;
                         }
                         i += sizeof(inotify_event) + event->len;
                         continue;
