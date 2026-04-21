@@ -74,9 +74,12 @@ void Watcher::start() {
         }
         std::unordered_map<int, std::string> wd_to_path;
         std::unordered_map<uint32_t, Watcher::PendingMove> pending_moves;
+        struct EventState {
+            std::chrono::steady_clock::time_point last_time;
+        };
+        std::unordered_map<std::string, EventState> file_events;
         add_watch_recursive(fd, watch_path, wd_to_path);
         alignas(inotify_event) char buf[4096];
-        std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;
         const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
             EventCallback cb_copy;
@@ -157,7 +160,8 @@ void Watcher::start() {
                             if (cb_copy) cb_copy(old_path + "|" + new_path, "RENAMED");
                             pending_moves.erase(it);
                         } else {
-                            if (cb_copy) cb_copy(new_path, "MODIFIED");
+                            auto now = std::chrono::steady_clock::now();
+                            file_events[new_path].last_time = now;
                         }
                         i += sizeof(inotify_event) + event->len;
                         continue;
@@ -182,15 +186,8 @@ void Watcher::start() {
                     }
                     std::string full_path = base_path + "/" + filename;
                     auto now = std::chrono::steady_clock::now();
-                    auto it = last_event_time.find(full_path);
-                    if (it != last_event_time.end() && now - it->second < debounce_window) {
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    if (cb_copy) {
-                        cb_copy(full_path, "MODIFIED");
-                    }
-                    last_event_time[full_path] = now;
+                    auto& st = file_events[full_path];
+                    st.last_time = now;
                 }
                 i += sizeof(inotify_event) + event->len;
             }
@@ -203,6 +200,16 @@ void Watcher::start() {
                     ++it;
                 }
             }
+            auto now = std::chrono::steady_clock::now();
+            for (auto it = file_events.begin(); it != file_events.end(); ) {
+                if (now - it->second.last_time > debounce_window) {
+                    if (cb_copy) cb_copy(it->first, "MODIFIED");
+                    it = file_events.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
         }
         for (const auto& [wd, _] : wd_to_path) {
             inotify_rm_watch(fd, wd);
