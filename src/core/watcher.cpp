@@ -79,6 +79,11 @@ void Watcher::start() {
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;
         const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
+            EventCallback cb_copy;
+            {
+                std::lock_guard<std::mutex> lock(callback_mutex);
+                cb_copy = callback;
+            }
             ssize_t len = read(fd, buf, sizeof(buf));
             if (len < 0) {
                 if (errno == EAGAIN) {
@@ -104,6 +109,8 @@ void Watcher::start() {
                     continue;
                 }
                 if (event->mask & IN_DELETE_SELF) {
+                    inotify_rm_watch(fd, event->wd);
+                    wd_to_path.erase(event->wd);
                     auto it = wd_to_path.begin();
                     while (it != wd_to_path.end()) {
                         if (it->second.starts_with(base_path + "/")) {
@@ -112,13 +119,6 @@ void Watcher::start() {
                         } else {
                             ++it;
                         }
-                    }
-                    inotify_rm_watch(fd, event->wd);
-                    wd_to_path.erase(event->wd);
-                    EventCallback cb_copy;
-                    {
-                        std::lock_guard<std::mutex> lock(callback_mutex);
-                        cb_copy = callback;
                     }
                     if (cb_copy) cb_copy(base_path, "DELETED");
                     i += sizeof(inotify_event) + event->len;
@@ -151,12 +151,6 @@ void Watcher::start() {
                     }
                     if (event->mask & IN_MOVED_TO) {
                         std::string new_path = base_path + "/" + event->name;
-                        EventCallback cb_copy;
-                        {
-                            std::lock_guard<std::mutex> lock(callback_mutex);
-                            cb_copy = callback;
-                        }
-
                         auto it = pending_moves.find(event->cookie);
                         if (it != pending_moves.end()) {
                             std::string old_path = it->second.path;
@@ -170,11 +164,6 @@ void Watcher::start() {
                     }
                     if (event->mask & IN_DELETE) {
                         std::string full_path = base_path + "/" + event->name;
-                        EventCallback cb_copy;
-                        {
-                            std::lock_guard<std::mutex> lock(callback_mutex);
-                            cb_copy = callback;
-                        }
                         if (cb_copy) cb_copy(full_path, "DELETED");
                         auto it = pending_moves.begin();
                         while (it != pending_moves.end()) {
@@ -198,11 +187,6 @@ void Watcher::start() {
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
-                    EventCallback cb_copy;
-                    {
-                        std::lock_guard<std::mutex> lock(callback_mutex);
-                        cb_copy = callback;
-                    }
                     if (cb_copy) {
                         cb_copy(full_path, "MODIFIED");
                     }
@@ -213,11 +197,6 @@ void Watcher::start() {
             auto it = pending_moves.begin();
             while (it != pending_moves.end()) {
                 if (std::chrono::steady_clock::now() - it->second.ts > std::chrono::milliseconds(500)) {
-                    EventCallback cb_copy;
-                    {
-                        std::lock_guard<std::mutex> lock(callback_mutex);
-                        cb_copy = callback;
-                    }
                     if (cb_copy) cb_copy(it->second.path, "DELETED");
                     it = pending_moves.erase(it);
                 } else {
