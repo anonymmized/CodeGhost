@@ -73,7 +73,7 @@ void Watcher::start() {
             return;
         }
         std::unordered_map<int, std::string> wd_to_path;
-        std::unordered_map<uint32_t, std::string> pending_moves;
+        std::unordered_map<uint32_t, PendingMove> pending_moves;
         add_watch_recursive(fd, watch_path, wd_to_path);
         alignas(inotify_event) char buf[4096];
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;
@@ -119,7 +119,7 @@ void Watcher::start() {
                     }
                     if (event->mask & IN_MOVED_FROM) {
                         std::string full_path = base_path + "/" + event->name;
-                        pending_moves[event->cookie] = full_path;
+                        pending_moves[event->cookie] = {full_path, std::chrono::steady_clock::now()};
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
@@ -133,9 +133,11 @@ void Watcher::start() {
 
                         auto it = pending_moves.find(event->cookie);
                         if (it != pending_moves.end()) {
-                            std::string old_path = it->second;
+                            std::string old_path = it->second.path;
                             if (cb_copy) cb_copy(old_path + "|" + new_path, "RENAMED");
                             pending_moves.erase(it);
+                        } else {
+                            if (cb_copy) cb_copy(new_path, "MODIFIED");
                         }
                         i += sizeof(inotify_event) + event->len;
                         continue;
@@ -148,6 +150,14 @@ void Watcher::start() {
                             cb_copy = callback;
                         }
                         if (cb_copy) cb_copy(full_path, "DELETED");
+                        auto it = pending_moves.begin();
+                        while (it != pending_moves.end()) {
+                            if (it->second.path == full_path) {
+                                pending_moves.erase(it);
+                                break;
+                            }
+                            ++it;
+                        }
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
@@ -173,6 +183,20 @@ void Watcher::start() {
                     last_event_time[full_path] = now;
                 }
                 i += sizeof(inotify_event) + event->len;
+            }
+            auto it = pending_moves.begin();
+            while (it != pending_moves.end()) {
+                if (std::chrono::steady_clock::now() - it->second.ts > std::chrono::milliseconds(500)) {
+                    EventCallback cb_copy;
+                    {
+                        std::lock_guard<std::mutex> lock(callback_mutex);
+                        cb_copy = callback;
+                    }
+                    if (cb_copy) cb_copy(it->second.path, "DELETED");
+                    it = pending_moves.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
         for (const auto& [wd, _] : wd_to_path) {
