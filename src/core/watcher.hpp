@@ -25,3 +25,16 @@ class Watcher {
         std::mutex callback_mutex;
         std::thread worker;
 };
+
+class WatchRegistry {
+    public:
+        explicit WatchRegistry(int n_fd) : fd(n_fd) {}
+        void addWatch(const std::string& path);
+        void addWatchRecursive(const std::string& root);
+        std::string getPath(int wd);
+        std::string remove(int wd);
+        void removeSubtree(std::string& path);
+    private:
+        int fd;
+        std::unordered_map<int, std::string> wd_to_path;
+};
