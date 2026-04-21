@@ -4,9 +4,14 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <chrono>
 
 class Watcher {
     public:
+        struct PendingMove {
+            std::string path;
+            std::chrono::steady_clock::time_point ts;
+        };
         explicit Watcher(std::string path_to_watch);
         ~Watcher();
         void start();
