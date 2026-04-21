@@ -97,12 +97,12 @@ void Watcher::start() {
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
+		std::string base_path = it_wd->second;
 		if (event->mask & IN_IGNORED) {
 		  wd_to_path.erase(it_wd);
 		  i += sizeof(inotify_event) + event->len;
 		  continue;
 		}
-		std::string base_path = it_wd->second;
 		if (event->mask & IN_DELETE_SELF) {
 		  std::string full_path = base_path + "/" + event->name;
 		  EventCallback cb_copy;
