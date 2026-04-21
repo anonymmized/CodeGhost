@@ -6,6 +6,8 @@
 #include <mutex>
 #include <chrono>
 
+bool shouldIgnoreFile(const std::string& name);
+
 class Watcher {
     public:
         struct PendingMove {

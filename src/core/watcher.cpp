@@ -23,7 +23,15 @@ bool shouldIgnoreFile(const std::string& name) {
     return false;
 }
 
-void add_watch(int fd, const std::string& path, std::unordered_map<int, std::string>& wd_to_path) {
+std::string WatchRegistry::getPath(int wd) {
+    auto it_wd = wd_to_path.find(wd);
+    if (it_wd == wd_to_path.end()) {
+        return "";
+    }
+    return it_wd->second;
+}
+
+void WatchRegistry::addWatch(const std::string& path) {
     for (const auto& [_, p] : wd_to_path) {
         if (p == path) return;
     }
@@ -36,8 +44,8 @@ void add_watch(int fd, const std::string& path, std::unordered_map<int, std::str
     }
 }
 
-void add_watch_recursive(int fd, const std::string& root, std::unordered_map<int, std::string>& wd_to_path) {
-    add_watch(fd, root, wd_to_path);
+void WatchRegistry::addWatchRecursive(const std::string& root) {
+    addWatch(root);
     std::error_code ec;
     for (const auto& entry : fs::recursive_directory_iterator(root, ec)) {
         if (ec) continue;
@@ -45,7 +53,7 @@ void add_watch_recursive(int fd, const std::string& root, std::unordered_map<int
         const std::string path = entry.path().string();
         auto name = entry.path().filename().string();
         if (shouldIgnoreFile(name)) continue;
-        add_watch(fd, path, wd_to_path);
+        addWatch(fd, path, wd_to_path);
     }
 }
 
@@ -72,13 +80,13 @@ void Watcher::start() {
             running = false;
             return;
         }
-        std::unordered_map<int, std::string> wd_to_path;
         std::unordered_map<uint32_t, Watcher::PendingMove> pending_moves;
         struct EventState {
             std::chrono::steady_clock::time_point last_time;
         };
         std::unordered_map<std::string, EventState> file_events;
-        add_watch_recursive(fd, watch_path, wd_to_path);
+        WatchRegistry wr(fd);
+        wr.addWatchRecursive(watch_path);
         alignas(inotify_event) char buf[4096];
         const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
@@ -100,12 +108,7 @@ void Watcher::start() {
             ssize_t i =0;
             while (i < len) {
                 auto* event = reinterpret_cast<inotify_event*>(buf + i);
-                auto it_wd = wd_to_path.find(event->wd);
-                if (it_wd == wd_to_path.end()) {
-                    i += sizeof(inotify_event) + event->len;
-                    continue;
-                }
-                std::string base_path = it_wd->second;
+                std::string base_path = wr.getPath(event->wd);
                 if (event->mask & IN_IGNORED) {
                     wd_to_path.erase(it_wd);
                     i += sizeof(inotify_event) + event->len;
@@ -129,12 +132,12 @@ void Watcher::start() {
                 }
                 if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
                     std::string new_dir = base_path + "/" + event->name;
-                    add_watch(fd, new_dir, wd_to_path);
+                    wr.addWatch(new_dir);
                     std::error_code ec;
                     for (const auto& entry : fs::recursive_directory_iterator(new_dir, ec)) {
                         if (ec) break;
                         if (entry.is_directory()) {
-                            add_watch(fd, entry.path().string(), wd_to_path);
+                            wr.addWatch(entry.path().string());
                         }
                     }
                     i += sizeof(inotify_event) + event->len;
