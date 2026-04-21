@@ -73,7 +73,7 @@ void Watcher::start() {
             return;
         }
         std::unordered_map<int, std::string> wd_to_path;
-        std::unordered_map<uint32_t, PendingMove> pending_moves;
+        std::unordered_map<uint32_t, Watcher::PendingMove> pending_moves;
         add_watch_recursive(fd, watch_path, wd_to_path);
         alignas(inotify_event) char buf[4096];
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_event_time;

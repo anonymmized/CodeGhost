@@ -4,6 +4,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <chrono>
 
 class Watcher {
     public:
