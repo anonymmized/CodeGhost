@@ -57,6 +57,27 @@ void WatchRegistry::addWatchRecursive(const std::string& root) {
     }
 }
 
+void WatchRegistry::removeSubtree(const std::string& path, int wd) {
+    inotify_rm_watch(fd, wd);
+    wd_to_path.erase(wd);
+    auto it = wd_to_path.begin();
+    while (it != wd_to_path.end()) {
+        if (it->second.starts_with(path + "/")) {
+            inotify_rm_watch(fd, it->first);
+            it = wd_to_path.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void WatchRegistry::cleanup() {
+    for (const auto& [wd, _] : wd_to_path) {
+        inotify_rm_watch(fd, wd);
+    }
+    wd_to_path.clear();
+}
+
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 void Watcher::setCallback(EventCallback cb) {
     // может вызываться из другого потока + защищаем mutex'ом во избежании ошибок с двойным использованием
@@ -109,23 +130,17 @@ void Watcher::start() {
             while (i < len) {
                 auto* event = reinterpret_cast<inotify_event*>(buf + i);
                 std::string base_path = wr.getPath(event->wd);
+                if (base_path.empty()) {
+                    i += sizeof(inotify_event) + event->len;
+                    continue;
+                }
                 if (event->mask & IN_IGNORED) {
                     wd_to_path.erase(it_wd);
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
                 if (event->mask & IN_DELETE_SELF) {
-                    inotify_rm_watch(fd, event->wd);
-                    wd_to_path.erase(event->wd);
-                    auto it = wd_to_path.begin();
-                    while (it != wd_to_path.end()) {
-                        if (it->second.starts_with(base_path + "/")) {
-                            inotify_rm_watch(fd, it->first);
-                            it = wd_to_path.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
+                    wr.removeSubtree(base_path, event->wd);
                     if (cb_copy) cb_copy(base_path, "DELETED");
                     i += sizeof(inotify_event) + event->len;
                     continue;
@@ -214,9 +229,7 @@ void Watcher::start() {
             }
 
         }
-        for (const auto& [wd, _] : wd_to_path) {
-            inotify_rm_watch(fd, wd);
-        }
+        wr.cleanup();
         close(fd);
     });
 }

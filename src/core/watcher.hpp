@@ -35,7 +35,8 @@ class WatchRegistry {
         void addWatchRecursive(const std::string& root);
         std::string getPath(int wd);
         std::string remove(int wd);
-        void removeSubtree(std::string& path);
+        void removeSubtree(const std::string& path, int wd);
+        void cleanup();
     private:
         int fd;
         std::unordered_map<int, std::string> wd_to_path;
