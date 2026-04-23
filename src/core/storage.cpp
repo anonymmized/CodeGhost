@@ -9,15 +9,8 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-static const std::string storage_path = ".codeghost/history.bin";
-static std::mutex storage_mutex;
-
-struct RecordHeader {
-    uint32_t size;
-    int64_t timestamp;
-    uint64_t hash;
-    uint64_t block_index;
-};
+const std::string storage_path = ".codeghost/history.bin";
+std::mutex storage_mutex;
 
 std::vector<Change> storage_read(){
         std::ifstream s(storage_path, std::ios::binary);
