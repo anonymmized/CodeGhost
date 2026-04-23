@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <mutex>
 #include "indexer.hpp"
+#include <ctime>
 
 uint64_t hashBlock(const std::string& block) {
     // использую для сравнения блоков тк сильно быстрее строк
@@ -92,11 +93,13 @@ std::vector<Change> Indexer::process(const std::string& filename, size_t block_s
         if (old_h != new_h) {
             // детект изменений
             Change c;
+            c.timestamp=static_cast<int64_t>(std::time(nullptr));
             c.file = filename;
             c.block_index = i;
             // если блока не было, то пустая строка
             c.old_content = (i < old.blocks.size()) ? old.blocks[i] : "";
             c.new_content = (i < blocks.size()) ? blocks[i] : "";
+            c.hash = new_hashes[i]; //pizdec naclepal sam razbereshsya 
             changes.push_back(std::move(c));
         }
     }

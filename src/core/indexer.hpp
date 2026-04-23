@@ -6,8 +6,10 @@
 #include <mutex>
 
 struct Change {
-    std::string file;
+    int64_t timestamp;
+    uint64_t hash;
     size_t block_index;
+    std::string file;
     std::string old_content;
     std::string new_content;
 };
