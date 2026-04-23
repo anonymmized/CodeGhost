@@ -9,18 +9,18 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-static const std::string storage_path = ".confighistory/history.bin";
+static const std::string storage_path = ".codeghost/history.bin";
 static std::mutex storage_mutex;
 
 struct RecordHeader {
     uint32_t size;
     int64_t timestamp;
     uint64_t hash;
-    size_t block_index;
+    uint64_t block_index;
 };
 
 std::vector<Change> storage_read(){
-        std::fstream s(storage_path, std::ios::binary);
+        std::ifstream s(storage_path, std::ios::binary);
         if (!s.is_open()) throw std::runtime_error("storage open failed");
         std::vector<Change> changes;
         while (true) {
@@ -60,8 +60,8 @@ void storage_append(const std::vector<Change>& changes){
     std::ofstream s(storage_path, std::ios::binary | std::ios::app);
     if (!s.is_open()) throw std::runtime_error("storage open failed");
     for ( const auto& c : changes) {
-        uint32_t payload_size = sizeof(int64_t) + sizeof(uint64_t) + sizeof(size_t) + c.file.size() + 1 + c.old_content.size() + 1 + c.new_content.size() + 1;
-        RecordHeader {
+        uint32_t payload_size = c.file.size() + 1 + c.old_content.size() + 1 + c.new_content.size() + 1;
+        RecordHeader header {
             payload_size,
             c.timestamp,
             c.hash,
