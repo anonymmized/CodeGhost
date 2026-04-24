@@ -96,6 +96,10 @@ void WatchRegistry::cleanup() {
     wd_to_path.clear();
 }
 
+void DebounceBuffer::touch(const std::string& path) {
+    files[path].ts = std::chrono::steady_clock::now();
+}
+
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 void Watcher::setCallback(EventCallback cb) {
     // может вызываться из другого потока + защищаем mutex'ом во избежании ошибок с двойным использованием
@@ -119,15 +123,11 @@ void Watcher::start() {
             running = false;
             return;
         }
-        struct EventState {
-            std::chrono::steady_clock::time_point last_time;
-        };
-        std::unordered_map<std::string, EventState> file_events;
         WatchRegistry wr(fd);
         wr.addWatchRecursive(watch_path);
         MoveTracker mt;
+        DebounceBuffer db;
         alignas(inotify_event) char buf[4096];
-        const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
             EventCallback cb_copy;
             {
@@ -193,8 +193,7 @@ void Watcher::start() {
                         if (auto old_path = mt.onMovedTo(event->cookie, new_path)) {
                             if (cb_copy) cb_copy(*old_path + "|" + new_path, "RENAMED");
                         } else {
-                            auto now = std::chrono::steady_clock::now();
-                            file_events[new_path].last_time = now;
+                            db.touch(new_path);
                         }
                         i += sizeof(inotify_event) + event->len;
                         continue;
@@ -210,23 +209,14 @@ void Watcher::start() {
                         continue;
                     }
                     std::string full_path = base_path + "/" + filename;
-                    auto now = std::chrono::steady_clock::now();
-                    auto& st = file_events[full_path];
-                    st.last_time = now;
+                    db.touch(full_path);
                 }
                 i += sizeof(inotify_event) + event->len;
             }
-            if (cb_copy) mt.flush(cb_copy);
-            auto now = std::chrono::steady_clock::now();
-            for (auto it = file_events.begin(); it != file_events.end(); ) {
-                if (now - it->second.last_time > debounce_window) {
-                    if (cb_copy) cb_copy(it->first, "MODIFIED");
-                    it = file_events.erase(it);
-                } else {
-                    ++it;
-                }
+            if (cb_copy) {
+                mt.flush(cb_copy);
+                db.flush(cb_copy);
             }
-
         }
         wr.cleanup();
         close(fd);
