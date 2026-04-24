@@ -247,6 +247,32 @@ void handler(int) {
     shutdown_requested = true;
 }
 
+void handle_event(Indexer& indexer, const std::string& path, const std::string& type) {
+    if (type == "RENAMED") {
+        auto pos = path.find('|');
+        if (pos == std::string::npos) return;
+
+        std::string old_path = path.substr(0, pos);
+        std::string new_path = path.substr(pos + 1);
+        indexer.rename(old_path, new_path);
+        Change c;
+        c.file = path;
+        storage_append({c});
+        return;
+    }
+    if (type == "DELETED") {
+        indexer.remove(path);
+        Change c;
+        c.file = path;
+        storage_append({c});
+        return;
+    }
+    auto changes = indexer.process(path);
+    if (!changes.empty()) {
+        storage_append(changes);
+    }
+}
+
 int main() {
     Watcher watchr("./");
     struct sigaction sa{};
@@ -259,22 +285,7 @@ int main() {
     // самая мозгоебская часть - связующее звено между вотчером и индексером
     watchr.setCallback([&indexer](const std::string& path, const std::string& type) {
             // вотчер сообщает об изменении , а индексер вычисляет различия
-            if (type == "RENAMED") {
-                auto pos = path.find('|');
-                std::string old_path = path.substr(0, pos);
-                std::string new_path = path.substr(pos + 1);
-                indexer.rename(old_path, new_path);
-                return;
-            }
-            if (type == "DELETED") {
-                indexer.remove(path);
-                std::cout << path << " [" << type << "]\n";
-                return;
-            }
-            auto changes = indexer.process(path);
-            for (auto& c : changes) {
-                std::cout << c.file << " [" << c.block_index << "]\n";
-            }
+            handle_event(indexer, path, type);
     });
     watchr.start();
     std::cout << "[Main] Watcher is running. Press Ctrl+C to stop.\n";
