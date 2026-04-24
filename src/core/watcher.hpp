@@ -37,6 +37,7 @@ class WatchRegistry {
         std::string remove(int wd);
         void removeSubtree(const std::string& path, int wd);
         void cleanup();
+        void remove(int wd);
     private:
         int fd;
         std::unordered_map<int, std::string> wd_to_path;
