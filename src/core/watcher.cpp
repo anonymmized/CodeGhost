@@ -44,6 +44,11 @@ void WatchRegistry::addWatch(const std::string& path) {
     }
 }
 
+void WatchRegistry::remove(int wd) {
+    inotify_rm_watch(fd, wd);
+    wd_to_path.erase(wd);
+}
+
 void WatchRegistry::addWatchRecursive(const std::string& root) {
     addWatch(root);
     std::error_code ec;
@@ -53,13 +58,12 @@ void WatchRegistry::addWatchRecursive(const std::string& root) {
         const std::string path = entry.path().string();
         auto name = entry.path().filename().string();
         if (shouldIgnoreFile(name)) continue;
-        addWatch(fd, path, wd_to_path);
+        addWatch(path);
     }
 }
 
 void WatchRegistry::removeSubtree(const std::string& path, int wd) {
-    inotify_rm_watch(fd, wd);
-    wd_to_path.erase(wd);
+    remove(wd);
     auto it = wd_to_path.begin();
     while (it != wd_to_path.end()) {
         if (it->second.starts_with(path + "/")) {
@@ -135,7 +139,7 @@ void Watcher::start() {
                     continue;
                 }
                 if (event->mask & IN_IGNORED) {
-                    wd_to_path.erase(it_wd);
+                    wr.remove(event->wd);
                     i += sizeof(inotify_event) + event->len;
                     continue;
                 }
