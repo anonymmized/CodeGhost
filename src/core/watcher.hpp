@@ -34,11 +34,34 @@ class WatchRegistry {
         void addWatch(const std::string& path);
         void addWatchRecursive(const std::string& root);
         std::string getPath(int wd);
-        std::string remove(int wd);
         void removeSubtree(const std::string& path, int wd);
         void cleanup();
         void remove(int wd);
     private:
         int fd;
         std::unordered_map<int, std::string> wd_to_path;
+};
+
+class MoveTracker {
+    public:
+        void onMovedFrom(uint32_t cookie, const std::string& path);
+        std::optional<std::string> onMovedTo(uint32_t cookie, const std::string& new_path);
+        template<typename Callback>
+        void flush(Callback cb) {
+            auto now = std::chrono::steady_clock::now();
+            for (auto it = pending.begin(); it != pending.end(); ) {
+                if (now - it->second.ts > std::chrono::milliseconds(500)) {
+                    cb(it->second.path, "DELETED");
+                    it = pending.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    private:
+        struct PendingMove {
+            std::string path;
+            std::chrono::steady_clock::time_point ts;
+        };
+        std::unordered_map<uint32_t, PendingMove> pending;
 };

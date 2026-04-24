@@ -44,6 +44,20 @@ void WatchRegistry::addWatch(const std::string& path) {
     }
 }
 
+void MoveTracker::onMovedFrom(uint32_t cookie, const std::string& path) {
+    pending[cookie] = {path, std::chrono::steady_clock::now()};
+}
+
+std::optional<std::string> MoveTracker::onMovedTo(uint32_t cookie, const std::string& new_path) {
+    auto it = pending.find(cookie);
+    if (it == pending.end()) {
+        return std::nullopt;
+    }
+    std::string old_path = it->second.path;
+    pending.erase(it);
+    return old_path;
+}
+
 void WatchRegistry::remove(int wd) {
     inotify_rm_watch(fd, wd);
     wd_to_path.erase(wd);
@@ -105,13 +119,13 @@ void Watcher::start() {
             running = false;
             return;
         }
-        std::unordered_map<uint32_t, Watcher::PendingMove> pending_moves;
         struct EventState {
             std::chrono::steady_clock::time_point last_time;
         };
         std::unordered_map<std::string, EventState> file_events;
         WatchRegistry wr(fd);
         wr.addWatchRecursive(watch_path);
+        MoveTracker mt;
         alignas(inotify_event) char buf[4096];
         const auto debounce_window = std::chrono::milliseconds(150);
         while (running) {
@@ -170,17 +184,14 @@ void Watcher::start() {
                     }
                     if (event->mask & IN_MOVED_FROM) {
                         std::string full_path = base_path + "/" + event->name;
-                        pending_moves[event->cookie] = {full_path, std::chrono::steady_clock::now()};
+                        mt.onMovedFrom(event->cookie, full_path);
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
                     if (event->mask & IN_MOVED_TO) {
                         std::string new_path = base_path + "/" + event->name;
-                        auto it = pending_moves.find(event->cookie);
-                        if (it != pending_moves.end()) {
-                            std::string old_path = it->second.path;
-                            if (cb_copy) cb_copy(old_path + "|" + new_path, "RENAMED");
-                            pending_moves.erase(it);
+                        if (auto old_path = mt.onMovedTo(event->cookie, new_path)) {
+                            if (cb_copy) cb_copy(*old_path + "|" + new_path, "RENAMED");
                         } else {
                             auto now = std::chrono::steady_clock::now();
                             file_events[new_path].last_time = now;
@@ -191,14 +202,6 @@ void Watcher::start() {
                     if (event->mask & IN_DELETE) {
                         std::string full_path = base_path + "/" + event->name;
                         if (cb_copy) cb_copy(full_path, "DELETED");
-                        auto it = pending_moves.begin();
-                        while (it != pending_moves.end()) {
-                            if (it->second.path == full_path) {
-                                pending_moves.erase(it);
-                                break;
-                            }
-                            ++it;
-                        }
                         i += sizeof(inotify_event) + event->len;
                         continue;
                     }
@@ -213,15 +216,7 @@ void Watcher::start() {
                 }
                 i += sizeof(inotify_event) + event->len;
             }
-            auto it = pending_moves.begin();
-            while (it != pending_moves.end()) {
-                if (std::chrono::steady_clock::now() - it->second.ts > std::chrono::milliseconds(500)) {
-                    if (cb_copy) cb_copy(it->second.path, "DELETED");
-                    it = pending_moves.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            if (cb_copy) mt.flush(cb_copy);
             auto now = std::chrono::steady_clock::now();
             for (auto it = file_events.begin(); it != file_events.end(); ) {
                 if (now - it->second.last_time > debounce_window) {
