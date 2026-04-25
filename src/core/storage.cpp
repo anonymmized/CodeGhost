@@ -26,7 +26,8 @@ std::vector<Change> storage_read(){
             const char* ptr = buffer.data();
             auto read_cstr = [&](std::string& out) {
                 out.clear();
-                while (*ptr != '\0') {
+                const char* end = buffer.data() + buffer.size();
+                while (ptr < end && *ptr != '\0') {
                     out.push_back(*ptr++);
                 }
                 ++ptr;

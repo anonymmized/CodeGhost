@@ -6,14 +6,8 @@
 #include <mutex>
 #include <chrono>
 
-bool shouldIgnoreFile(const std::string& name);
-
 class Watcher {
     public:
-        struct PendingMove {
-            std::string path;
-            std::chrono::steady_clock::time_point ts;
-        };
         explicit Watcher(std::string path_to_watch);
         ~Watcher();
         void start();
@@ -26,19 +20,4 @@ class Watcher {
         EventCallback callback;
         std::mutex callback_mutex;
         std::thread worker;
-};
-
-class WatchRegistry {
-    public:
-        explicit WatchRegistry(int n_fd) : fd(n_fd) {}
-        void addWatch(const std::string& path);
-        void addWatchRecursive(const std::string& root);
-        std::string getPath(int wd);
-        std::string remove(int wd);
-        void removeSubtree(const std::string& path, int wd);
-        void cleanup();
-        void remove(int wd);
-    private:
-        int fd;
-        std::unordered_map<int, std::string> wd_to_path;
 };

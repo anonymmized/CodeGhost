@@ -4,7 +4,7 @@
 #include <mutex>
 #include "indexer.hpp"
 
-extern const std::string storage_path = ".codeghost/history.bin";
+extern const std::string storage_path;
 extern std::mutex storage_mutex;
 struct RecordHeader {
     uint32_t size;
