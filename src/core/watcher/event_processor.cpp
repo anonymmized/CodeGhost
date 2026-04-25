@@ -2,12 +2,12 @@
 #include "watch_registry.hpp"
 #include "move_tracker.hpp"
 #include "debounce_buffer.hpp"
-#include "utils.hpp"
+#include "../filtering.hpp"
 #include <filesystem>
 
 namespace fs = std::filesystem;
 
-EventProcessor::EventProcessor(WatchRegistry& wr, MoveTracker& mt, DebounceBuffer& db, Callback cb) : wr(wr), mt(mt), db(db), cb(std::move(cb)) {}
+EventProcessor::EventProcessor(WatchRegistry& wr, MoveTracker& mt, DebounceBuffer& db, Callback cb, TypeFilter& filter) : wr(wr), mt(mt), db(db), cb(std::move(cb)), filter(filter) {}
 
 void EventProcessor::setCallback(Callback new_cb) { cb = std::move(new_cb); }
 
@@ -36,7 +36,7 @@ void EventProcessor::process(const inotify_event* event, const std::string& base
     }
     if (event->len > 0) {
         std::string filename = event->name;
-        if (shouldIgnoreFile(filename)) return;
+        if (!allow(filename)) return;
         std::string full_path = base_path + "/" + filename;
         if (event->mask & IN_MOVED_FROM) {
             mt.onMovedFrom(event->cookie, full_path);

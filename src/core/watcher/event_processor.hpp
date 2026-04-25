@@ -13,11 +13,12 @@ class EventProcessor {
         WatchRegistry& wr;
         MoveTracker& mt;
         DebounceBuffer& db;
+        TypesFilter& filter;
         Callback cb;
     public:
         using Callback = std::function<void(const std::string&, const std::string&)>;
         void setCallback(Callback new_cb);
-        EventProcessor(WatchRegistry& wr, MoveTracker& mt, DebounceBuffer& db, Callback cb);
+        EventProcessor(WatchRegistry& wr, MoveTracker& mt, DebounceBuffer& db, Callback cb, TypesFilter& filter);
         void process(const inotify_event* event, const std::string& base_path);
         void flush();
 };

@@ -1,9 +1,9 @@
 #include "watcher.hpp"
-#include "watcher/event_processor.hpp"
-#include "watcher/watch_registry.hpp"
-#include "watcher/move_tracker.hpp"
-#include "watcher/debounce_buffer.hpp"
-#include "watcher/utils.hpp"
+#include "event_processor.hpp"
+#include "watch_registry.hpp"
+#include "move_tracker.hpp"
+#include "debounce_buffer.hpp"
+#include "utils.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <sys/inotify.h>
