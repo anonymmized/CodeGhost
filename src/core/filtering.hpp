@@ -1,6 +1,6 @@
 #pragma once
 
-class TypesFilter {
+class TypeFilter {
     public:
         bool allow(const std::string& filename);
 };
