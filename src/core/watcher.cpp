@@ -1,5 +1,9 @@
 #include "watcher.hpp"
-#include "indexer.hpp"
+#include "watcher/event_processor.hpp"
+#include "watcher/watch_registry.hpp"
+#include "watcher/move_tracker.hpp"
+#include "watcher/debounce_buffer.hpp"
+#include "watcher/utils.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <sys/inotify.h>
@@ -8,97 +12,7 @@
 #include <chrono>
 #include <mutex>
 #include <csignal>
-#include <unordered_map>
-#include <filesystem>
 #include <thread>
-
-namespace fs = std::filesystem;
-bool shouldIgnoreFile(const std::string& name) {
-    // фильтрация мусорных файлов, в редакторах кода при создании/записи и тд также создаются временные файлы, чтобы их исключить нужна эта функция
-    // тут игнорируются временные файлы и скрытые файлы
-    if (name.empty()) return true;
-    if (name.starts_with(".#")) return true;
-    if (name.ends_with("~") || name.ends_with(".swp") || name.ends_with(".swo") || name.ends_with(".tmp")) return true;
-    if (name[0] == '.') return true;
-    return false;
-}
-
-std::string WatchRegistry::getPath(int wd) {
-    auto it_wd = wd_to_path.find(wd);
-    if (it_wd == wd_to_path.end()) {
-        return "";
-    }
-    return it_wd->second;
-}
-
-void WatchRegistry::addWatch(const std::string& path) {
-    for (const auto& [_, p] : wd_to_path) {
-        if (p == path) return;
-    }
-    int wd = inotify_add_watch(fd, path.c_str(), IN_CLOSE_WRITE | IN_CREATE | IN_MOVED_TO | IN_DELETE | IN_DELETE_SELF | IN_MOVED_FROM);
-    if (wd >= 0) {
-        wd_to_path[wd] = path;
-    } else {
-        std::cerr << "Failed to add watch for "
-                  << path << ": " << strerror(errno) << '\n';
-    }
-}
-
-void MoveTracker::onMovedFrom(uint32_t cookie, const std::string& path) {
-    pending[cookie] = {path, std::chrono::steady_clock::now()};
-}
-
-std::optional<std::string> MoveTracker::onMovedTo(uint32_t cookie, const std::string& new_path) {
-    auto it = pending.find(cookie);
-    if (it == pending.end()) {
-        return std::nullopt;
-    }
-    std::string old_path = it->second.path;
-    pending.erase(it);
-    return old_path;
-}
-
-void WatchRegistry::remove(int wd) {
-    inotify_rm_watch(fd, wd);
-    wd_to_path.erase(wd);
-}
-
-void WatchRegistry::addWatchRecursive(const std::string& root) {
-    addWatch(root);
-    std::error_code ec;
-    for (const auto& entry : fs::recursive_directory_iterator(root, ec)) {
-        if (ec) continue;
-        if (!entry.is_directory()) continue;
-        const std::string path = entry.path().string();
-        auto name = entry.path().filename().string();
-        if (shouldIgnoreFile(name)) continue;
-        addWatch(path);
-    }
-}
-
-void WatchRegistry::removeSubtree(const std::string& path, int wd) {
-    remove(wd);
-    auto it = wd_to_path.begin();
-    while (it != wd_to_path.end()) {
-        if (it->second.starts_with(path + "/")) {
-            inotify_rm_watch(fd, it->first);
-            it = wd_to_path.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void WatchRegistry::cleanup() {
-    for (const auto& [wd, _] : wd_to_path) {
-        inotify_rm_watch(fd, wd);
-    }
-    wd_to_path.clear();
-}
-
-void DebounceBuffer::touch(const std::string& path) {
-    files[path].ts = std::chrono::steady_clock::now();
-}
 
 Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 void Watcher::setCallback(EventCallback cb) {
@@ -128,12 +42,14 @@ void Watcher::start() {
         MoveTracker mt;
         DebounceBuffer db;
         alignas(inotify_event) char buf[4096];
+        EventProcessor ep(wr, mt, db, nullptr);
         while (running) {
             EventCallback cb_copy;
             {
                 std::lock_guard<std::mutex> lock(callback_mutex);
                 cb_copy = callback;
             }
+            ep.setCallback(cb_copy);
             ssize_t len = read(fd, buf, sizeof(buf));
             if (len < 0) {
                 if (errno == EAGAIN) {
@@ -144,79 +60,14 @@ void Watcher::start() {
                 std::cerr << "read error: " << strerror(errno) << '\n';
                 break;
             }
-            ssize_t i =0;
+            ssize_t i = 0;
             while (i < len) {
                 auto* event = reinterpret_cast<inotify_event*>(buf + i);
                 std::string base_path = wr.getPath(event->wd);
-                if (base_path.empty()) {
-                    i += sizeof(inotify_event) + event->len;
-                    continue;
-                }
-                if (event->mask & IN_IGNORED) {
-                    wr.remove(event->wd);
-                    i += sizeof(inotify_event) + event->len;
-                    continue;
-                }
-                if (event->mask & IN_DELETE_SELF) {
-                    wr.removeSubtree(base_path, event->wd);
-                    if (cb_copy) cb_copy(base_path, "DELETED");
-                    i += sizeof(inotify_event) + event->len;
-                    continue;
-                }
-                if (event->len > 0 && (event->mask & IN_ISDIR) && (event->mask & (IN_CREATE | IN_MOVED_TO))) {
-                    std::string new_dir = base_path + "/" + event->name;
-                    wr.addWatch(new_dir);
-                    std::error_code ec;
-                    for (const auto& entry : fs::recursive_directory_iterator(new_dir, ec)) {
-                        if (ec) break;
-                        if (entry.is_directory()) {
-                            wr.addWatch(entry.path().string());
-                        }
-                    }
-                    i += sizeof(inotify_event) + event->len;
-                    continue;
-                }
-                if (event->len > 0) {
-                    std::string filename = event->name;
-                    if (shouldIgnoreFile(filename)) {
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    if (event->mask & IN_MOVED_FROM) {
-                        std::string full_path = base_path + "/" + event->name;
-                        mt.onMovedFrom(event->cookie, full_path);
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    if (event->mask & IN_MOVED_TO) {
-                        std::string new_path = base_path + "/" + event->name;
-                        if (auto old_path = mt.onMovedTo(event->cookie, new_path)) {
-                            if (cb_copy) cb_copy(*old_path + "|" + new_path, "RENAMED");
-                        } else {
-                            db.touch(new_path);
-                        }
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    if (event->mask & IN_DELETE) {
-                        std::string full_path = base_path + "/" + event->name;
-                        if (cb_copy) cb_copy(full_path, "DELETED");
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    if (!(event->mask & IN_CLOSE_WRITE)) {
-                        i += sizeof(inotify_event) + event->len;
-                        continue;
-                    }
-                    std::string full_path = base_path + "/" + filename;
-                    db.touch(full_path);
-                }
+                ep.process(event, base_path);
                 i += sizeof(inotify_event) + event->len;
             }
-            if (cb_copy) {
-                mt.flush(cb_copy);
-                db.flush(cb_copy);
-            }
+            ep.flush();
         }
         wr.cleanup();
         close(fd);
