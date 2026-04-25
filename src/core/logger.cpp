@@ -10,10 +10,13 @@ namespace Logger {
     if (!this->filename.empty()) file_out.open(this->filename, std::ios::app);
   }
   void Logger::logMessage(const LogLevel &level, const std::string &message, FileInfo extraInfo) {
+    std::lock_guard<std::mutex> lock(mtx);
     std::string formedText = formLog(level, message, extraInfo);
     if (out) {
       *out << formedText;
+      out->flush();
     }
+    writeLogToFile(formedText);
   };
   
   std::string Logger::formLog(const LogLevel &level, const std::string &message, FileInfo extraInfo){
@@ -31,14 +34,13 @@ namespace Logger {
     return ss.str();
    };
 
-  void Logger::writeLogToFile(const LogLevel &level, const std::string &message, FileInfo extraInfo){
-    std::lock_guard<std::mutex> lock(mtx);
+  void Logger::writeLogToFile(const std::string &formedText){
+    if (filename.empty()) return;
     if (!file_out.is_open() && !filename.empty()) {
       file_out.open(filename, std::ios::app);
-    }
-    std::string log_message = formLog(level, message, extraInfo);
+    };
     if (file_out.is_open()) {
-      file_out << log_message;
+      file_out << formedText;
       file_out.flush();
     }
   };

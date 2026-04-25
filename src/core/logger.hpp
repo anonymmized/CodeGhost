@@ -34,10 +34,7 @@ namespace Logger {
 		    const std::string &message,
 		    FileInfo extraInfo
 		    );
-    void writeLogToFile(const LogLevel &level,
-			const std::string &message,
-			FileInfo extraInfo
-			);
+    void writeLogToFile(const std::string &message);
   };
   #define LOG_MESSAGE(logger, level, message, extraInfo) logger.logMessage(level, message, extraInfo)
   #define LOG_INFO(logger, message, extraInfo) logger.logMessage(Logger::INFO, message, extraInfo)
