@@ -99,7 +99,7 @@ std::vector<Change> Indexer::process(const std::string& filename, size_t block_s
             // если блока не было, то пустая строка
             c.old_content = (i < old.blocks.size()) ? old.blocks[i] : "";
             c.new_content = (i < blocks.size()) ? blocks[i] : "";
-            c.hash = new_hashes[i]; //pizdec naclepal sam razbereshsya 
+            c.hash = new_h; //pizdec naclepal sam razbereshsya
             changes.push_back(std::move(c));
         }
     }
