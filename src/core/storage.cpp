@@ -30,7 +30,7 @@ std::vector<Change> storage_read(){
                 while (ptr < end && *ptr != '\0') {
                     out.push_back(*ptr++);
                 }
-                ++ptr;
+                if (ptr < end) ++ptr;
             };
             std::string file, old_c, new_c;
             read_cstr(file);

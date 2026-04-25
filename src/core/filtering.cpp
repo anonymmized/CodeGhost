@@ -1,9 +1,10 @@
 #include "filtering.hpp"
 
-bool TypesFilter::allow(const std::string& filename) {
-    return !filename.ends_with("~") &&
-        !filename.ends_with(".swp") &&
-        !filename.ends_with(".swo") &&
-        !filename.ends_with(".tmp") &&
-        !filename.starts_with(".#");
+bool TypeFilter::allow(const std::string& filename) {
+    if (filename.starts_with('.')) return false;
+    return filename.ends_with(".cpp") ||
+        filename.ends_with(".hpp") ||
+        filename.ends_with(".c") ||
+        filename.ends_with(".h") ||
+        filename.ends_with(".txt");
 }
