@@ -1,5 +1,5 @@
 #include "watch_registry.hpp"
-#include "utils.hpp"
+#include "../filtering.hpp"
 #include <system_error>
 #include <iostream>
 #include <cstring>
@@ -25,7 +25,6 @@ void WatchRegistry::addWatchRecursive(const std::string& root) {
         if (!entry.is_directory()) continue;
         const std::string path = entry.path().string();
         auto name = entry.path().filename().string();
-        if (shouldIgnoreFile(name)) continue;
         addWatch(path);
     }
 }

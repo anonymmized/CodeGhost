@@ -1,9 +1,9 @@
 #include "watcher.hpp"
-#include "watcher/event_processor.hpp"
-#include "watcher/watch_registry.hpp"
-#include "watcher/move_tracker.hpp"
-#include "watcher/debounce_buffer.hpp"
-#include "watcher/utils.hpp"
+#include "event_processor.hpp"
+#include "watch_registry.hpp"
+#include "move_tracker.hpp"
+#include "debounce_buffer.hpp"
+#include "../filtering.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <sys/inotify.h>
@@ -37,12 +37,13 @@ void Watcher::start() {
             running = false;
             return;
         }
-        WatchRegistry wr(fd);
+        TypeFilter filter;
+        WatchRegistry wr(fd, filter);
         wr.addWatchRecursive(watch_path);
         MoveTracker mt;
         DebounceBuffer db;
         alignas(inotify_event) char buf[4096];
-        EventProcessor ep(wr, mt, db, nullptr);
+        EventProcessor ep(wr, mt, db, nullptr, filter);
         while (running) {
             EventCallback cb_copy;
             {
