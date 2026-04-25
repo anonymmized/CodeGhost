@@ -10,10 +10,10 @@ namespace fs = std::filesystem;
 class WatchRegistry {
     private:
         int fd;
-        TypesFilter filter;
+        TypeFilter& filter;
         std::unordered_map<int, std::string> wd_to_path;
     public:
-        explicit WatchRegistry(int n_fd, TypesFilter& n_filter) : fd(n_fd), filter(n_filter) {}
+        explicit WatchRegistry(int n_fd, TypeFilter& n_filter) : fd(n_fd), filter(n_filter) {}
         void addWatch(const std::string& path);
         void addWatchRecursive(const std::string& root);
         void removeSubtree(const std::string& path, int wd);

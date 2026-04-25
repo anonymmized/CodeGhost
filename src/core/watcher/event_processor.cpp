@@ -36,7 +36,9 @@ void EventProcessor::process(const inotify_event* event, const std::string& base
     }
     if (event->len > 0) {
         std::string filename = event->name;
-        if (!allow(filename)) return;
+        if (!(event->mask & IN_ISDIR)) {
+            if (!filter.allow(filename)) return;
+        }
         std::string full_path = base_path + "/" + filename;
         if (event->mask & IN_MOVED_FROM) {
             mt.onMovedFrom(event->cookie, full_path);

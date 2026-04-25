@@ -25,7 +25,6 @@ void WatchRegistry::addWatchRecursive(const std::string& root) {
         if (!entry.is_directory()) continue;
         const std::string path = entry.path().string();
         auto name = entry.path().filename().string();
-        if (!filter.allow(name)) continue;
         addWatch(path);
     }
 }
