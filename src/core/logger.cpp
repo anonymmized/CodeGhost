@@ -9,16 +9,6 @@ namespace Logger {
   Logger::Logger(const std::string &filename, std::ostream &out) : filename(std::move(filename)), out(&out) {
     if (!this->filename.empty()) file_out.open(this->filename, std::ios::app);
   }
-  void Logger::logMessage(const LogLevel &level, const std::string &message, FileInfo extraInfo) {
-    std::lock_guard<std::mutex> lock(mtx);
-    std::string formedText = formLog(level, message, extraInfo);
-    if (out) {
-      *out << formedText;
-      out->flush();
-    }
-    writeLogToFile(formedText);
-  };
-  
   std::string Logger::formLog(const LogLevel &level, const std::string &message, FileInfo extraInfo){
     std::stringstream ss;
     auto now = std::chrono::system_clock::now();
@@ -39,9 +29,24 @@ namespace Logger {
     if (!file_out.is_open() && !filename.empty()) {
       file_out.open(filename, std::ios::app);
     };
+    if (!file_out) {
+      std::cerr << "ERROR: Could not create or open log file: " << filename 
+		<< " : " << strerror(errno) << std::endl;
+      return;
+    }
     if (file_out.is_open()) {
       file_out << formedText;
       file_out.flush();
     }
+  };
+
+  void Logger::logMessage(const LogLevel &level, const std::string &message, FileInfo extraInfo) {
+    std::lock_guard<std::mutex> lock(mtx);
+    std::string formedText = formLog(level, message, extraInfo);
+    if (out) {
+      *out << formedText;
+      out->flush();
+    }
+    writeLogToFile(formedText);
   };
 }
