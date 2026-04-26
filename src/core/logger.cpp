@@ -16,48 +16,48 @@ namespace Logger {
     }
   }
 
-  void Logger::logMessage(const LogLevel &level, const std::string &message, FileInfo extraInfo) {
+  void Logger::setLevel(LogLevel level) {
     std::lock_guard<std::mutex> lock(mtx);
-    std::string formedText = formLog(level, message, extraInfo);
-    if (out) {
-      *out << formedText;
-    }
-    writeLogToFile_unsafe(formedText);
-  };
+    min_level = level;
+  }
 
-  std::string Logger::formLog(const LogLevel &level, const std::string &message, FileInfo extraInfo){
+  std::string Logger::formLog(LogLevel level, const std::string& message, const FileInfo& extraInfo) {
     std::stringstream ss;
     auto now = std::chrono::system_clock::now();
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    ss << "[" << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << "] ";
+
+    std::tm tm_buf{};
+    localtime_r(&now_time, &tm_buf);
+    ss << "[" << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S") << "] ";
+
     switch (level) {
-    case INFO:  ss << "[INFO] ";  break;
-    case WARN:  ss << "[WARN] ";  break;
-    case ERROR: ss << "[ERROR] "; break;
+      case INFO: ss << "[INFO] "; break;
+      case WARN: ss << "[WARN] "; break;
+      case ERROR: ss << "[ERROR] "; break;
     }
-    if (!extraInfo.path.empty()) ss << "[" << extraInfo.path << ":" << extraInfo.line << "] ";
+    if (!extraInfo.path.empty()) {
+      ss << "[" << extraInfo.path << ":" << extraInfo.line << "] ";
+    }
     ss << message << "\n";
     return ss.str();
-   };
+  }
 
-  // For writing in file separately from std::out(example DEBUG), logMessage use std::cout and writing to file
-  void Logger::writeLogToFile(const std::string &formedText){
+  void Logger::writeToFileUnsafe(const std::string& text) {
+    if (!file_out.is_open()) return;
+    file_out << text;
+    file_out.flush();
+  }
+
+  void Logger::log(LogLevel level, const std::string& message, const FileInfo& extraInfo) {
+    if (level < min_level) return;
     std::lock_guard<std::mutex> lock(mtx);
-    writeLogToFile_unsafe(formedText);
-  };
+    std::string text = formLog(level, message, extraInfo);
+    out << text;
+    writeToFileUnsafe(text);
+  }
 
-  void Logger::writeLogToFile_unsafe(const std::string &formedText){
-    if (filename.empty()) return;
-    if (!file_out.is_open()) {
-      file_out.open(filename, std::ios::app);
-    };
-    if (!file_out) {
-      std::cerr << "ERROR: Could not create or open log file: " << filename << " : " << strerror(errno) << std::endl;
-      return;
-    }
-    if (file_out.is_open()) {
-      file_out << formedText;
-      file_out.flush();
-    }
-  };
+  Logger& getGlobalLogger() {
+    static Logger instance("codeghost.log");
+    return instance;
+  }
 }
