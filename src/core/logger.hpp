@@ -2,13 +2,13 @@
 #define LOGGER_HPP
 #include <string>
 #include <iostream>
-#include <unordered_map>
 #include <cerrno>
 #include <fstream>
 #include <mutex>
 
 
 namespace Logger {
+  enum LogLevel {INFO, WARN, ERROR};
   struct FileInfo {
     std::string path;
     int line = 0;
@@ -21,8 +21,8 @@ namespace Logger {
     std::string filename;
     std::ostream* out;
     std::ofstream file_out;
+    void writeLogToFile_unsafe(const std::string& log_message);
   public:
-    enum LogLevel {INFO, WARN, ERROR};
     explicit Logger(const std::string& filename = "", std::ostream &out = std::cout);
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
