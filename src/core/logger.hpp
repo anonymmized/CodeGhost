@@ -22,7 +22,7 @@ namespace Logger {
     std::ostream* out;
     std::ofstream file_out;
     LogLevel min_level = INFO;
-    std::string fromLog(const LogLevel level, const std::string& message, const FileInfo& extraInfo);
+    std::string formLog(const LogLevel level, const std::string& message, const FileInfo& extraInfo);
     void writeToFileUnsafe(const std::string& text);
   public:
     explicit Logger(const std::string& filename = "", std::ostream& out = std::cout);
