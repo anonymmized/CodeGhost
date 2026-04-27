@@ -3,7 +3,6 @@
 #include "watch_registry.hpp"
 #include "move_tracker.hpp"
 #include "debounce_buffer.hpp"
-#include "../filtering.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <sys/inotify.h>
@@ -14,7 +13,6 @@
 #include <csignal>
 #include <thread>
 
-Watcher::Watcher(std::string path_to_watch) : watch_path(std::move(path_to_watch)) {}
 void Watcher::setCallback(EventCallback cb) {
     // может вызываться из другого потока + защищаем mutex'ом во избежании ошибок с двойным использованием
     std::lock_guard<std::mutex> lock(callback_mutex);
@@ -37,11 +35,14 @@ void Watcher::start() {
             running = false;
             return;
         }
-        TypeFilter filter;
-        WatchRegistry wr(fd, filter);
-        wr.addWatchRecursive(watch_path);
-        MoveTracker mt;
-        DebounceBuffer db;
+        if (config.allowed_extensions.empty()) {
+            throw std::runtime_error("allowed_extensions is empty");
+        }
+        TypeFilter filter(config.allowed_extensions);
+        WatchRegistry wr(fd);
+        wr.addWatchRecursive(config.root_path);
+        MoveTracker mt(config.move_timeout);
+        DebounceBuffer db(config.debounce_window);
         alignas(inotify_event) char buf[4096];
         EventProcessor ep(wr, mt, db, nullptr, filter);
         while (running) {
@@ -111,14 +112,18 @@ void handle_event(Indexer& indexer, const std::string& path, const std::string& 
 }
 
 int main() {
-    Watcher watchr("./");
+    Config config;
+    config.allowed_extensions = {
+        ".cpp", ".hpp", ".c", ".h", ".txt"
+    };
+    Watcher watchr(config);
     struct sigaction sa{};
     sa.sa_handler = handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     // безопасная регисрация сигнала
     sigaction(SIGINT, &sa, nullptr);
-    Indexer indexer;
+    Indexer indexer(config.block_size);
     // самая мозгоебская часть - связующее звено между вотчером и индексером
     watchr.setCallback([&indexer](const std::string& path, const std::string& type) {
             // вотчер сообщает об изменении , а индексер вычисляет различия

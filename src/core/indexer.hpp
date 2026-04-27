@@ -21,10 +21,12 @@ struct FileState {
 
 class Indexer {
     public:
-        std::vector<Change> process(const std::string& filename, size_t block_size = 5);
+        Indexer(size_t bl_size) : block_size(std::move(bl_size)) {}
+        std::vector<Change> process(const std::string& filename);
         void remove(const std::string& path);
         void rename(const std::string& old_path, const std::string& new_path);
     private:
+        size_t block_size;
         std::unordered_map<std::string, FileState> state;
         std::mutex state_mutex;
 };

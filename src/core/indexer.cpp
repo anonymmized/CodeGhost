@@ -44,7 +44,7 @@ std::vector<std::string> makeBlocks(const std::vector<std::string>& lines, size_
     return blocks;
 }
 
-std::vector<Change> Indexer::process(const std::string& filename, size_t block_size) {
+std::vector<Change> Indexer::process(const std::string& filename) {
     // если файла нет, то удаляю его из state потому что могут быть несуществующие файлы
     if (!std::filesystem::exists(filename)) {
         std::lock_guard<std::mutex> lock(state_mutex);
