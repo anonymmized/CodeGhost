@@ -7,11 +7,11 @@
 
 namespace Logger {
 
-  Logger::Logger(const std::string &filename, std::ostream& out) : filename(filename), out(out) {
+  Logger::Logger(const std::string &filename, std::ostream& out) : filename(filename), out(&out) {
     if (!this->filename.empty()) {
       file_out.open(this->filename, std::ios::app);
       if (!file_out) {
-        std::cerr << "Logger: failed to open file: " << filename << "\n";
+        std::cerr << "Logger: failed to open file: " << this->filename << '\n';
       }
     }
   }
@@ -45,14 +45,18 @@ namespace Logger {
   void Logger::writeToFileUnsafe(const std::string& text) {
     if (!file_out.is_open()) return;
     file_out << text;
-    file_out.flush();
   }
 
   void Logger::log(LogLevel level, const std::string& message, const FileInfo& extraInfo) {
-    if (level < min_level) return;
+    LogLevel current_level;
+    {
+      std::lock_guard<std::mutex> lock(mtx);
+      current_level = min_level;
+    }
+    if (level < current_level) return;
     std::lock_guard<std::mutex> lock(mtx);
     std::string text = formLog(level, message, extraInfo);
-    out << text;
+    (*out) << text;
     writeToFileUnsafe(text);
   }
 
