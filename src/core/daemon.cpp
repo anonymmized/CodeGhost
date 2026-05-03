@@ -16,7 +16,7 @@ struct Config {
     std::vector<std::string> critical_paths;
     int start_hour;
     int end_hour;
-    bool recursive = true;
+    bool watch_recursive = true;
 };
 
 void daemonise(bool silent = true) {
@@ -36,13 +36,25 @@ void daemonise(bool silent = true) {
     }
 }
 
-/*
+
 Config loadFromConfig(const std::string& path) {
-
+    std::ifstream infile(path);
+    if (!infile.is_open()) {
+        throw std::runtime_error("The config.json wasn't opened");
+    }
+    json j;
+    infile >> j;
     Config conf;
-
+    conf.watch_paths = j["watch_paths"].get<std::vector<std::string>>();
+    conf.ignore_paths = j["ignore_paths"].get<std::vector<std::string>>();
+    conf.critical_paths = j["critical_paths"].get<std::vector<std::string>>();
+    conf.start_hour = j["start_hour"];
+    conf.end_hour = j["end_hour"];
+    conf.watch_recursive = j["watch_recursive"];
+    infile.close();
+    return conf;
 }
-*/
+
 
 void uploadToConfig(const Config& conf) {
     json j;
@@ -57,7 +69,7 @@ void uploadToConfig(const Config& conf) {
     }
     j["start_hour"] = conf.start_hour;
     j["end_hour"] = conf.end_hour;
-    j["recursive"] = conf.recursive;
+    j["watch_recursive"] = conf.watch_recursive;
     std::ofstream outfile("config.json");
     if (!outfile.is_open()) {
         throw std::runtime_error("The config.json wasn't opened");
@@ -73,9 +85,11 @@ std::vector<std::string> getArgs(const char **argv) {
 
 int main(int argc, char **argv) {
 
-    Config conf = {{".", "../"}, {"/tmp", "/var"}, {"/root", "/user"}, 10, 20, true};
+    Config conf = {{".", "../"}, {"/tmp", "/var"}, {"/root", "/user"}, 10, 20, false};
     uploadToConfig(conf);
     std::cout << "The config was upload to file\n";
+    Config new_conf = loadFromConfig("./config.json");
+    std::cout << "Recursive: " << new_config.watch_recursive << '\n';
     /*
     int fd = inotify_init();
     int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE);
