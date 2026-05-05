@@ -13,24 +13,7 @@
 #include <iomanip>
 #include <syslog.h>
 
-constexpr std::string_view BLUE =   "\x1b[94m";
-constexpr std::string_view YELLOW = "\x1b[33m";
-constexpr std::string_view RED =    "\x1b[31m";
-constexpr std::string_view CLR =    "\x1b[0m";
-
 using json = nlohmann::ordered_json;
-
-struct Config {
-    std::vector<std::string> watch_paths;
-    std::vector<std::string> ignore_paths;
-    std::vector<std::string> critical_paths;
-    std::string logpath = "log.log"; //TODO: implement in loadFromConfig(), uploadToConfig()
-    int start_hour;
-    int end_hour;
-    bool watch_recursive = true;
-};
-
-
 
 void daemonise(bool silent = true) {
     pid_t pid = fork();
@@ -97,47 +80,6 @@ std::vector<std::string> getArgs(const char **argv) {
 */
 
 //logger.h start
-enum LOG_LEVEL {
-    LOG_INFO = 0,
-    LOG_WARN = 1,
-    LOG_ERROR = 2,
-    LOG_NONE = 3,
-};
-
-constexpr std::array<std::string_view, 3> strLevels = {
-    " [INFO] ",
-    " [WARN] ",
-    " [ERROR] "
-};
-
-constexpr std::array<std::string_view, 3> LOG_COLORS = {
-    BLUE,       // LOG_INFO
-    YELLOW,     // LOG_WARN
-    RED         // LOG_ERROR
-};
-
-class LogSettings {
-public:
-    uint8_t log_level : 2;
-    uint8_t tty_level : 2;
-    uint8_t colored   : 1;
-    uint8_t timestamp : 1;
-    uint8_t reserved  : 2;
-    constexpr LogSettings(uint8_t _log_level = LOG_INFO,
-                          uint8_t _tty_level = LOG_INFO,
-                          bool _colored = true,
-                          bool _timestamp = true) noexcept
-        : log_level(_log_level & 0x03), //prevent width overflow, just in case.
-          tty_level(_tty_level & 0x03),
-          colored(_colored ? 1u : 0u),
-          timestamp(_timestamp ? 1u : 0u),
-          reserved(0)
-    {}
-};
-
-uint8_t LOGLEVEL;
-Config config;
-
 void log( LOG_LEVEL level,
           const std::string& str,
           const LogSettings& settings,
@@ -154,9 +96,9 @@ void log( LOG_LEVEL level,
         logfile << strLevels[lvl] << str << "\n";
     if (level >= settings.tty_level) {
         if (settings.colored)
-            std::cout << LOG_COLORS[lvl] << std::put_time(tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << CLR << str << "\n";
+            std::cout << LOG_COLORS[lvl] << std::put_time(&tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << CLR << str << "\n";
         else
-            std::cout << std::put_time(tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << str << "\n";
+            std::cout << std::put_time(&tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << str << "\n";
     }
 }
 //logger.h end
