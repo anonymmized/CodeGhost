@@ -9,6 +9,9 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <cstdint>
+#include <chrono>
+#include <iomanip>
+#include <syslog.h>
 
 constexpr std::string_view BLUE =   "\x1b[94m";
 constexpr std::string_view YELLOW = "\x1b[33m";
@@ -26,6 +29,8 @@ struct Config {
     int end_hour;
     bool watch_recursive = true;
 };
+
+
 
 void daemonise(bool silent = true) {
     pid_t pid = fork();
@@ -100,15 +105,10 @@ enum LOG_LEVEL {
 };
 
 constexpr std::array<std::string_view, 3> strLevels = {
-    "[INFO] ",
-    "[WARN] ",
-    "[ERROR] "
+    " [INFO] ",
+    " [WARN] ",
+    " [ERROR] "
 };
-
-constexpr std::string_view BLUE =   "\x1b[94m";
-constexpr std::string_view YELLOW = "\x1b[33m";
-constexpr std::string_view RED =    "\x1b[31m";
-constexpr std::string_view CLR =    "\x1b[0m";
 
 constexpr std::array<std::string_view, 3> LOG_COLORS = {
     BLUE,       // LOG_INFO
@@ -135,24 +135,28 @@ public:
     {}
 };
 
-LogSettings LOGSETTINGS;
 uint8_t LOGLEVEL;
-std::ofstream LOGFILE;
 Config config;
 
 void log( LOG_LEVEL level,
           const std::string& str,
-          const LogSettings& settings = LOGSETTINGS,
-          std::ofstream& logfile = LOGFILE ) {
+          const LogSettings& settings,
+          std::ostream& logfile) {
+
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    localtime_r(&t, &tm);
+    logfile << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
+
     uint32_t lvl = static_cast<uint32_t>(level);
     if (level >= settings.log_level)
         logfile << strLevels[lvl] << str << "\n";
     if (level >= settings.tty_level) {
         if (settings.colored)
-            std::cout << LOG_COLORS[lvl] << strLevels[lvl] << CLR << str << "\n";
+            std::cout << LOG_COLORS[lvl] << std::put_time(tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << CLR << str << "\n";
         else
-            std::cout << strLevels[lvl] << str << "\n";
-        //TODO: timestamps
+            std::cout << std::put_time(tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << str << "\n";
     }
 }
 //logger.h end
@@ -161,6 +165,18 @@ int main(int argc, char **argv) {
     //TODO: config and argument parser should be in the beggining to initialize the following and the LOGFILE.
 
     std::string logpath = "test.log";
+    LogSettings LOGSETTINGS;
+    std::ofstream file(logpath, std::ios::app | std::ios::out);
+    if (!file.is_open()) {
+        openlog("daemon", LOG_PID | LOG_CONS, LOG_DAEMON);
+        syslog(LOG_ERR, "Failed to open logfile: %s", logpath.c_str());
+        std::cerr << "Failed to open logfile: " << logpath << '\n';
+        closelog();
+        return 1;
+    }
+    log(LOG_INFO, "Logging to: " + logpath, LOGSETTINGS, file);
+
+    /*
     try {
         LOGFILE.open(logpath, std::ios::out | std::ios::app);
         log(LOG_INFO, "Logging to: " + logpath);
@@ -168,8 +184,9 @@ int main(int argc, char **argv) {
         LOGSETTINGS.log_level = LOG_NONE; //not logging into file.
         log(LOG_ERROR, "Failed to open logfile for writing: "+ logpath );
     }
+    */
 
-    log(LOG_INFO, std::string(argv[0]) + " started." );
+    log(LOG_INFO, std::string(argv[0]) + " started.", LOGSETTINGS, file);
 
     try {
         config = loadFromConfig("./config.json");
