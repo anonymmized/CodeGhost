@@ -10,6 +10,11 @@
 #include <stdexcept>
 #include <cstdint>
 
+constexpr std::string_view BLUE =   "\x1b[94m";
+constexpr std::string_view YELLOW = "\x1b[33m";
+constexpr std::string_view RED =    "\x1b[31m";
+constexpr std::string_view CLR =    "\x1b[0m";
+
 using json = nlohmann::ordered_json;
 
 struct Config {
@@ -128,7 +133,7 @@ public:
           timestamp(_timestamp ? 1u : 0u),
           reserved(0)
     {}
-}; 
+};
 
 LogSettings LOGSETTINGS;
 uint8_t LOGLEVEL;
@@ -154,7 +159,7 @@ void log( LOG_LEVEL level,
 
 int main(int argc, char **argv) {
     //TODO: config and argument parser should be in the beggining to initialize the following and the LOGFILE.
-    
+
     std::string logpath = "test.log";
     try {
         LOGFILE.open(logpath, std::ios::out | std::ios::app);
@@ -169,7 +174,7 @@ int main(int argc, char **argv) {
     try {
         config = loadFromConfig("./config.json");
         log(LOG_INFO, "Config is loaded. Recursive: " + std::to_string(config.watch_recursive));
-       
+
        //init with default paths if none provided
         if ( config.watch_paths.empty() && config.critical_paths.empty() ){
             log(LOG_WARN, "No paths were provided. Using default ones...");
