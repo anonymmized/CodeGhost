@@ -7,17 +7,13 @@
 //#include <sys/inotify.h>
 #include <vector>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
+#include <cstdint>
+#include <chrono>
+#include <iomanip>
+#include <syslog.h>
 
 using json = nlohmann::ordered_json;
-
-struct Config {
-    std::vector<std::string> watch_paths;
-    std::vector<std::string> ignore_paths;
-    std::vector<std::string> critical_paths;
-    int start_hour;
-    int end_hour;
-    bool watch_recursive = true;
-};
 
 void daemonise(bool silent = true) {
     pid_t pid = fork();
@@ -40,7 +36,7 @@ void daemonise(bool silent = true) {
 Config loadFromConfig(const std::string& path) {
     std::ifstream infile(path);
     if (!infile.is_open()) {
-        throw std::runtime_error("The config.json wasn't opened");
+        throw std::runtime_error("The config.json wasn't opened"); //TODO: check if file doesn't exist, throw relevant exception.
     }
     json j;
     infile >> j;
@@ -84,12 +80,52 @@ std::vector<std::string> getArgs(const char **argv) {
 */
 
 int main(int argc, char **argv) {
+    //TODO: config and argument parser should be in the beggining to initialize the following and the LOGFILE.
 
-    Config conf = {{".", "../"}, {"/tmp", "/var"}, {"/root", "/user"}, 10, 20, false};
-    uploadToConfig(conf);
-    std::cout << "The config was upload to file\n";
-    Config new_conf = loadFromConfig("./config.json");
-    std::cout << "Recursive: " << new_config.watch_recursive << '\n';
+    std::string logpath = "test.log";
+    LogSettings LOGSETTINGS;
+    std::ofstream file(logpath, std::ios::app | std::ios::out);
+    if (!file.is_open()) {
+        openlog("daemon", LOG_PID | LOG_CONS, LOG_DAEMON);
+        syslog(LOG_ERR, "Failed to open logfile: %s", logpath.c_str());
+        std::cerr << "Failed to open logfile: " << logpath << '\n';
+        closelog();
+        return 1;
+    }
+    log(LOG_INFO, "Logging to: " + logpath, LOGSETTINGS, file);
+
+    /*
+    try {
+        LOGFILE.open(logpath, std::ios::out | std::ios::app);
+        log(LOG_INFO, "Logging to: " + logpath);
+    } catch (...) {
+        LOGSETTINGS.log_level = LOG_NONE; //not logging into file.
+        log(LOG_ERROR, "Failed to open logfile for writing: "+ logpath );
+    }
+    */
+
+    log(LOG_INFO, std::string(argv[0]) + " started.", LOGSETTINGS, file);
+
+    try {
+        config = loadFromConfig("./config.json");
+        log(LOG_INFO, "Config is loaded. Recursive: " + std::to_string(config.watch_recursive));
+
+       //init with default paths if none provided
+        if ( config.watch_paths.empty() && config.critical_paths.empty() ){
+            log(LOG_WARN, "No paths were provided. Using default ones...");
+            config.watch_paths = {"/var/", "/etc/", ".", "/root"};
+            config.ignore_paths = {"/tmp", "/var"};
+            config.critical_paths = {"/boot/", "/etc/"};
+            config.watch_recursive = true;
+        }
+    } catch (const std::runtime_error& e) {
+        log(LOG_ERROR, e.what() );
+        log(LOG_INFO, "Using default config values.");
+    } catch (...) {
+        log(LOG_ERROR, "Reading from config failed for no reason.");
+        log(LOG_INFO, "Using default config values.");
+    }
+
     /*
     int fd = inotify_init();
     int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE);
@@ -122,3 +158,4 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
