@@ -73,11 +73,6 @@ void uploadToConfig(const Config& conf) {
     outfile << j.dump(4);
     outfile.close();
 }
-/*
-std::vector<std::string> getArgs(const char **argv) {
-
-}
-*/
 
 int main(int argc, char **argv) {
     //TODO: config and argument parser should be in the beggining to initialize the following and the LOGFILE.
