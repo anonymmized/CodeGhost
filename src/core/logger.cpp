@@ -6,11 +6,11 @@
 #include <iostream>
 #include <fstream>
 
-int checkStream(std::ostream& file) {
+int checkStream(std::ofstream& file) {
     if (!file.is_open()) {
         openlog("daemon", LOG_PID | LOG_CONS, LOG_DAEMON);
-        syslog(LOG_ERR, "Failed to open logfile: %s", logpath.c_str());
-        std::cerr << "Failed to open logfile: " << logpath << '\n';
+        syslog(LOG_ERR, "Failed to open logfile: %s", path.c_str());
+        std::cerr << "Failed to open logfile: " << path << '\n';
         closelog();
         return 1;
     }
@@ -29,7 +29,7 @@ void Logger::log(const std::string& str) {
 
     uint32_t lvl = static_cast<uint32_t>(level);
     if (level >= log_level)
-        logfile << std::put_time(&tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << str << '\n';
+        path << std::put_time(&tm, "%d.%m.%y %H:%M:%S") << strLevels[lvl] << str << '\n';
 
     if (level >= tty_level) {
         if (colored)
