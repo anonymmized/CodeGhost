@@ -32,6 +32,24 @@ bool compareHashes(const uint64_t& old_hash, const std::string& path) {
     return calcHash(path) == old_hash;
 }
 
+void calcCurrent(std::unordered_map<std::string, uint64_t>& table, const std::string& current_path) {
+    if (!std::filesystem::exists(current_path))
+        throw std::runtime_error("Path doesn't exist: " + current_path);
+    if (!std::filesystem::is_directory(current_path))
+        throw std::runtime_error("Path isn't directory: " + current_path);
+    for (const auto& file : std::filesystem::directory_iterator(current_path)) {
+        try {
+            if (std::filesystem::is_regular_file(file.path)) continue;
+            std::string wfile = file.path().string();
+            table[wfile] = calcHash(wfile);
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "Filesystem error: " << e.what() << '\n';
+        } catch (const std::exception& e) {
+            std::cerr << "Error processing file " << wfile << ": " << e.what() << '\n';
+        }
+    }
+}
+
 void calcRecursive(std::unordered_map<std::string, uint64_t>& table, const std::string& starting_path) {
     if (!std::filesystem::exists(starting_path))
         throw std::runtime_error("Path doesn't exist: " + starting_path);
@@ -39,9 +57,7 @@ void calcRecursive(std::unordered_map<std::string, uint64_t>& table, const std::
         throw std::runtime_error("Path isn't directory: " + starting_path);
     for (const auto& file : std::filesystem::recursive_directory_iterator(starting_path)) {
         try {
-            if (std::filesystem::is_regular_file(file.path())) {
-                continue;
-            }
+            if (std::filesystem::is_regular_file(file.path())) continue;
             std::string wfile = file.path().string();
             table[wfile] = calcHash(wfile);
         } catch (const std::filesystem::filesystem_error& e) {

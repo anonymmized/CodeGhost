@@ -35,7 +35,7 @@ class Logger {
 
         {}
         void log(const std::string& str);
-        int checkStream(std::ostream& file);
+        int checkStream(std::ofstream& file);
 };
 
 enum LogLevel {
