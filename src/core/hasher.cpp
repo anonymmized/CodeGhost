@@ -37,46 +37,54 @@ bool compareHashes(const uint64_t& old_hash, const std::string& path) {
     return calcHash(path) == old_hash;
 }
 
-void calcCurrent(std::unordered_map<std::string, uint64_t>& table, const std::string& current_path) {
+bool shouldIgnoreDir(const std::filesystem::path& path, const std::vector<std::string>& ignore_paths) {
+    std::string current = path.string();
+    for (const auto& ignore : ignore_paths) {
+        if (current.starts_with(ignore)) return true;
+    }
+    return false;
+}
+
+void calcDirHashes(std::unordered_map<std::string, uint64_t>& table,
+                   const std::string& current_path,
+                   bool recursive,
+                   const std::vector<std::string>& ignore_paths) {
     if (!std::filesystem::exists(current_path))
         throw std::runtime_error("Path doesn't exist: " + current_path);
     if (!std::filesystem::is_directory(current_path))
         throw std::runtime_error("Path isn't directory: " + current_path);
-    for (const auto& file : std::filesystem::directory_iterator(current_path)) {
-        try {
-            if (!std::filesystem::is_regular_file(file.path())) continue;
-            std::string wfile = file.path().string();
-            table[wfile] = calcHash(wfile);
-        } catch (const std::filesystem::filesystem_error& e) {
-            std::cerr << "Filesystem error: " << e.what() << '\n';
-        } catch (const std::exception& e) {
-            std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
+    if (recursive) {
+        for (const auto& file : std::filesystem::recursive_directory_iterator(current_path)) {
+            try {
+                if (!std::filesystem::is_regular_file(file.path())) continue;
+                if (shouldIgnoreDir(file, ignore_paths)) continue;
+                std::string wfile = file.path().string();
+                table[wfile] = calcHash(wfile);
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "Filesystem error: " << e.what() << '\n';
+            } catch (const std::exception& e) {
+                srd::cerr << "Error processing file " << file.path << ": " << e.what() << '\n';
+            }
         }
     }
-}
-
-void calcRecursive(std::unordered_map<std::string, uint64_t>& table, const std::string& starting_path) {
-    if (!std::filesystem::exists(starting_path))
-        throw std::runtime_error("Path doesn't exist: " + starting_path);
-    if (!std::filesystem::is_directory(starting_path))
-        throw std::runtime_error("Path isn't directory: " + starting_path);
-    for (const auto& file : std::filesystem::recursive_directory_iterator(starting_path)) {
-        try {
-            if (!std::filesystem::is_regular_file(file.path())) continue;
-            std::string wfile = file.path().string();
-            table[wfile] = calcHash(wfile);
-        } catch (const std::filesystem::filesystem_error& e) {
-            std::cerr << "Filesystem error: " << e.what() << '\n';
-        } catch (const std::exception& e) {
-            std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
+    else {
+        for (const auto& file : std::filesystem::directory_iterator(current_path)) {
+            try {
+                if (!std::filesystem::is_regular_file(file.path())) continue;
+                std::string wfile = file.path().string();
+                table[wfile] = calcHash(wfile);
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "Filesystem error: " << e.what() << '\n';
+            } catch (const std::exception& e) {
+                std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
+            }
         }
     }
 }
 
 void initHashes(const Config& conf, const std::string& path) {
     std::unordered_map<std::string, uint64_t> table;
-    if (conf.watch_recursive) calcRecursive(table, path);
-    else calcCurrent(table, path);
+    calcDirHashes(table, path, conf.watch_recursive);
     std::ofstream baseline("baseline.json");
     if (!baseline.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
@@ -89,9 +97,3 @@ void initHashes(const Config& conf, const std::string& path) {
     baseline.close();
 }
 
-int main() {
-    Config conf;
-    conf.watch_recursive = false;
-    initHashes(conf, ".");
-    return 0;
-}
