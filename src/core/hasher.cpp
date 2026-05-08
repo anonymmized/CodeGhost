@@ -3,7 +3,12 @@
 #include <iostream>
 #include <iomanip>
 #include <filesystem>
+#include <xxhash.h>
 #include <unordered_map>
+#include <nlohmann/json.hpp>
+#include "daemon.hpp"
+
+using json = nlohmann::ordered_json;
 
 uint64_t calcHash(const std::string& path) {
     std::ifstream infile(path, std::ios::binary);
@@ -39,13 +44,13 @@ void calcCurrent(std::unordered_map<std::string, uint64_t>& table, const std::st
         throw std::runtime_error("Path isn't directory: " + current_path);
     for (const auto& file : std::filesystem::directory_iterator(current_path)) {
         try {
-            if (std::filesystem::is_regular_file(file.path)) continue;
+            if (!std::filesystem::is_regular_file(file.path())) continue;
             std::string wfile = file.path().string();
             table[wfile] = calcHash(wfile);
         } catch (const std::filesystem::filesystem_error& e) {
             std::cerr << "Filesystem error: " << e.what() << '\n';
         } catch (const std::exception& e) {
-            std::cerr << "Error processing file " << wfile << ": " << e.what() << '\n';
+            std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
         }
     }
 }
@@ -57,13 +62,36 @@ void calcRecursive(std::unordered_map<std::string, uint64_t>& table, const std::
         throw std::runtime_error("Path isn't directory: " + starting_path);
     for (const auto& file : std::filesystem::recursive_directory_iterator(starting_path)) {
         try {
-            if (std::filesystem::is_regular_file(file.path())) continue;
+            if (!std::filesystem::is_regular_file(file.path())) continue;
             std::string wfile = file.path().string();
             table[wfile] = calcHash(wfile);
         } catch (const std::filesystem::filesystem_error& e) {
             std::cerr << "Filesystem error: " << e.what() << '\n';
         } catch (const std::exception& e) {
-            std::cerr << "Error processing file " << wfile << ": " << e.what() << '\n';
+            std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
         }
     }
+}
+
+void initHashes(const Config& conf, const std::string& path) {
+    std::unordered_map<std::string, uint64_t> table;
+    if (conf.watch_recursive) calcRecursive(table, path);
+    else calcCurrent(table, path);
+    std::ofstream baseline("baseline.json");
+    if (!baseline.is_open()) {
+        throw std::runtime_error("The baseline.json wasn't opened");
+    }
+    json j;
+    for (const auto& pair : table) {
+        j[pair.first] = pair.second;
+    }
+    baseline << j.dump(4);
+    baseline.close();
+}
+
+int main() {
+    Config conf;
+    conf.watch_recursive = false;
+    initHashes(conf, ".");
+    return 0;
 }
