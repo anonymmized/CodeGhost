@@ -45,6 +45,22 @@ bool shouldIgnoreDir(const std::filesystem::path& path, const std::vector<std::s
     return false;
 }
 
+// helper to doublecode sectors
+void processFileEntry(std::unordered_map<std::string, uint64_t>& table,
+                      const std::filesystem::directory_entry& entry,
+                      const std::vector<std::string>& ignore_paths) {
+    try {
+        if (!std::filesystem::is_regular_file(entry.path())) return;
+        if (shouldIgnoreDir(entry.path(), ignore_paths)) return;
+        std::string wfile = entry.path().string();
+        table[wfile] = calcHash(wfile);
+    } catch (std::filesystem::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << '\n';
+    } catch (std::exception& e) {
+        std::cerr << "Error processing file " << entry.path() << ": " << e.what() << '\n';
+    }
+}
+
 void calcDirHashes(std::unordered_map<std::string, uint64_t>& table,
                    const std::string& current_path,
                    bool recursive,
@@ -55,31 +71,26 @@ void calcDirHashes(std::unordered_map<std::string, uint64_t>& table,
         throw std::runtime_error("Path isn't directory: " + current_path);
     if (recursive) {
         for (const auto& file : std::filesystem::recursive_directory_iterator(current_path)) {
-            try {
-                if (!std::filesystem::is_regular_file(file.path())) continue;
-                if (shouldIgnoreDir(file, ignore_paths)) continue;
-                std::string wfile = file.path().string();
-                table[wfile] = calcHash(wfile);
-            } catch (const std::filesystem::filesystem_error& e) {
-                std::cerr << "Filesystem error: " << e.what() << '\n';
-            } catch (const std::exception& e) {
-                srd::cerr << "Error processing file " << file.path << ": " << e.what() << '\n';
-            }
+            processFileEntry(table, file, ignore_paths);
         }
-    }
-    else {
+    } else {
         for (const auto& file : std::filesystem::directory_iterator(current_path)) {
-            try {
-                if (!std::filesystem::is_regular_file(file.path())) continue;
-                std::string wfile = file.path().string();
-                table[wfile] = calcHash(wfile);
-            } catch (const std::filesystem::filesystem_error& e) {
-                std::cerr << "Filesystem error: " << e.what() << '\n';
-            } catch (const std::exception& e) {
-                std::cerr << "Error processing file " << file.path() << ": " << e.what() << '\n';
-            }
+            processFileEntry(table, file, ignore_paths);
         }
     }
+}
+
+std::unordered_map<std::string, uint64_t> loadBaseline(const std::string& path) {
+    std::unordered_map<std::string, uint64_t> table;
+    std::ifstream baseline(path);
+    if (!baseline.is_open())
+        throw std::runtime_error("The baseline.json wasn't opened");
+    json j;
+    baseline >> j;
+    for (const auto& pair : j.items()) {
+        table[pair.key()] = pair.value().get<uint64_t>();
+    }
+    return table;
 }
 
 void initHashes(const Config& conf, const std::string& path) {
