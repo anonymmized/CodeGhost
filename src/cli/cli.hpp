@@ -4,6 +4,7 @@
 struct CliArgs {
   bool daemonise = false;
   std::string configPath;
+  std::string logPath;
 };
 
 class CliParser {

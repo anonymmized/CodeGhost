@@ -45,5 +45,5 @@ class Logger {
                          uint8_t _tty_level = LOG_INFO,
                          bool _colored = true,
                          bool _timestamp = true);
-        void log(const std::string& str);
+        void log(LogLevel level, const std::string& str);
 };
