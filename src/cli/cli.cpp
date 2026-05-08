@@ -1,7 +1,7 @@
 #include "cli.hpp"
 #include <iostream>
 #include <cstring>
-#include <cstdlib> 
+#include <cstdlib>
 
 CliArgs CliParser::parse(int argc, char* argv[]) {
   CliArgs args;
@@ -11,15 +11,18 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
        args.daemonise = true;
     } else if (arg.rfind("--config", 0) == 0) {
       args.configPath = arg.substr(9);
+    } else if (arg.rfind("--log", 0) == 0) {
+      args.logPath = arg.substr(6);
     } else {
       std::cerr << "Unknown argument" << arg << std::endl;
       printUsage();
       exit(1);
     }
     if (args.configPath.empty()) {
-      // global variables need to be set
       args.configPath = std::getenv("CONFIG_PATH_SEC_ANALYZER");
     }
+    if (args.logPath.empty())
+      args.logPath("daemon.log");
   }
   return args;
 }
@@ -28,5 +31,6 @@ void CliParser::printUsage() {
   // Repair the name of the program
   std::cout << "Usage: security-analyzer" << " --config=<path> [--daemonise]\n"
     << " --config=<path>  path to config file json\n"
-    << " --daemonise      run as background daemon\n";
+    << " --daemonise      run as background daemon\n"
+    << " --log=<path>     path to log file (dafault: daemon.log)";
 }
