@@ -9,6 +9,26 @@
 
 using json = nlohmann::ordered_json;
 
+/*
+ * [ baseline in Hasher class means a basic filenames and hashes in it ]
+ * [ table is a current system state. it changes until admin accept changes and then baseline updates with table ]
+ * [ ignore_paths and recursion variables are using for better code readability ]
+*/
+
+void Hasher::fileChanged(const std::string& path, Logger& logger) {
+    if (!std::filesystem::exists(path)) return;
+    uint64_t new_hash = calcHash(path);
+
+    auto it = baseline.find(path);
+    if (it == baseline.end()) {
+        table[path] = new_hash;
+        logger.log(LOG_INFO, "Created: " + path);
+    } else if (it->second != new_hash) {
+        table[path] = new_hash;
+        logger.log(LOG_INFO, "Modified: " + path);
+    }
+}
+
 uint64_t Hasher::calcHash(const std::string& path) {
     std::ifstream infile(path, std::ios::binary);
     if (!infile.is_open())
@@ -24,6 +44,11 @@ uint64_t Hasher::calcHash(const std::string& path) {
     uint64_t hash = XXH64_digest(state);
     XXH64_freeState(state);
     return hash;
+}
+
+void loadBaselineFile(const std::string& path) {
+    baseline = loadBaseline(path);
+    table = baseline;
 }
 
 bool Hasher::compareHashes(const uint64_t& old_hash, const std::string& path) {
@@ -68,7 +93,7 @@ void Hasher::calcDirHashes(const std::string& current_path) {
     }
 }
 
-std::unordered_map<std::string, uint64_t> Hasher::loadBaseline(const std::string& path) {
+void Hasher::loadBaseline(const std::string& path) {
     std::ifstream baseline(path);
     if (!baseline.is_open())
         throw std::runtime_error("The baseline.json wasn't opened");
@@ -78,7 +103,6 @@ std::unordered_map<std::string, uint64_t> Hasher::loadBaseline(const std::string
     for (const auto& pair : j.items()) {
         table[pair.key()] = pair.value().get<uint64_t>();
     }
-    return table;
 }
 
 void Hasher::initHashes(const Config& conf, const std::string& path) {
@@ -95,4 +119,10 @@ void Hasher::initHashes(const Config& conf, const std::string& path) {
     baseline.close();
 }
 
-void Hasher::deleteHash(const std::string& path) { table.erase(path); }
+void Hasher::deleteHash(const std::string& path, Logger& logger) {
+    auto it = table.find(path);
+    if (it != table.end()) {
+        table.erase(it);
+        logger.log(LOG_INFO, "Deleted: " + path);
+    }
+}
