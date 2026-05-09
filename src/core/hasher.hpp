@@ -23,3 +23,22 @@ std::unordered_map<std::string, uint64_t> loadBaseline(const std::string& path);
 
 // to collect hashes to baseline.json
 void initHashes(const Config& conf, const std::string& path);
+
+class Hasher {
+    private:
+        std::unordered_map<std::string, uint64_t> table;
+        std::vector<std::string> ignore_paths;
+        bool recursive = true;
+    public:
+        Hasher(std::unordered_map<std::string, uint64_t>& _table,
+               std::vector<std::string>& _ignore_paths,
+               bool _recursive) : table(_table), ignore_paths(_ignore_paths), recursive(_recursive) {}
+        uint64_t calcHash(const std::string& path);
+        bool compareHashes(const uint64_t& old_hash, const std::string& path);
+        bool shouldIgnoreDir(const std::filesystem::path& path);
+        void processFileEntry(const std::filesystem::directory_entry& entry);
+        void calcDirHashes(const std::string& current_path);
+        std::unordered_map<std::string, uint64_t> loadBaseline(const std::string& path);
+        void initHashes(const Config& conf, const std::string& path);
+        void deleteHash(const std::string& path);
+};

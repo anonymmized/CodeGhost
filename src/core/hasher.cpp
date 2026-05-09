@@ -9,34 +9,28 @@
 
 using json = nlohmann::ordered_json;
 
-uint64_t calcHash(const std::string& path) {
+uint64_t Hasher::calcHash(const std::string& path) {
     std::ifstream infile(path, std::ios::binary);
-    if (!infile.is_open()) {
+    if (!infile.is_open())
         throw std::runtime_error("File wasn't opened");
-    }
-
     XXH64_state_t* state = XXH64_createState();
-    if (!state) {
+    if (!state)
         throw std::runtime_error("Failed to allocate state");
-    }
     XXH64_reset(state, 0);
-
     char buff[8192];
     while (infile.read(buff, sizeof(buff)) || infile.gcount() > 0) {
         XXH64_update(state, buff, infile.gcount());
     }
-
     uint64_t hash = XXH64_digest(state);
     XXH64_freeState(state);
-
     return hash;
 }
 
-bool compareHashes(const uint64_t& old_hash, const std::string& path) {
+bool Hasher::compareHashes(const uint64_t& old_hash, const std::string& path) {
     return calcHash(path) == old_hash;
 }
 
-bool shouldIgnoreDir(const std::filesystem::path& path, const std::vector<std::string>& ignore_paths) {
+bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
     std::string current = path.string();
     for (const auto& ignore : ignore_paths) {
         if (current.starts_with(ignore)) return true;
@@ -45,9 +39,7 @@ bool shouldIgnoreDir(const std::filesystem::path& path, const std::vector<std::s
 }
 
 // helper to doublecode sectors
-void processFileEntry(std::unordered_map<std::string, uint64_t>& table,
-                      const std::filesystem::directory_entry& entry,
-                      const std::vector<std::string>& ignore_paths) {
+void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         if (!std::filesystem::is_regular_file(entry.path())) return;
         if (shouldIgnoreDir(entry.path(), ignore_paths)) return;
@@ -60,10 +52,7 @@ void processFileEntry(std::unordered_map<std::string, uint64_t>& table,
     }
 }
 
-void calcDirHashes(std::unordered_map<std::string, uint64_t>& table,
-                   const std::string& current_path,
-                   bool recursive,
-                   const std::vector<std::string>& ignore_paths) {
+void Hasher::calcDirHashes(const std::string& current_path) {
     if (!std::filesystem::exists(current_path))
         throw std::runtime_error("Path doesn't exist: " + current_path);
     if (!std::filesystem::is_directory(current_path))
@@ -79,22 +68,21 @@ void calcDirHashes(std::unordered_map<std::string, uint64_t>& table,
     }
 }
 
-std::unordered_map<std::string, uint64_t> loadBaseline(const std::string& path) {
-    std::unordered_map<std::string, uint64_t> table;
+std::unordered_map<std::string, uint64_t> Hasher::loadBaseline(const std::string& path) {
     std::ifstream baseline(path);
     if (!baseline.is_open())
         throw std::runtime_error("The baseline.json wasn't opened");
     json j;
     baseline >> j;
+    table.clear();
     for (const auto& pair : j.items()) {
         table[pair.key()] = pair.value().get<uint64_t>();
     }
     return table;
 }
 
-void initHashes(const Config& conf, const std::string& path) {
-    std::unordered_map<std::string, uint64_t> table;
-    calcDirHashes(table, path, conf.watch_recursive);
+void Hasher::initHashes(const Config& conf, const std::string& path) {
+    calcDirHashes(path);
     std::ofstream baseline("baseline.json");
     if (!baseline.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
@@ -107,3 +95,4 @@ void initHashes(const Config& conf, const std::string& path) {
     baseline.close();
 }
 
+void Hasher::deleteHash(const std::string& path) { table.erase(path); }
