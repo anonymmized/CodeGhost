@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
   logger.log(LOG_INFO, "Logging to: " + args.logPath);
   logger.log(LOG_INFO, std::string(argv[0]) + " started.");
   try {
-    config = loadFromConfig(args.configPath);
+    Config config = loadFromConfig(args.configPath);
     logger.log(LOG_INFO, "Config is loaded. Recursive: " + std::to_string(config.watch_recursive));
 
     if (config.watch_paths.empty() && config.critical_paths.empty()) {
@@ -28,9 +28,11 @@ int main(int argc, char* argv[]) {
     logger.log(LOG_ERROR, "Reading from config failed for no reason.");
     logger.log(LOG_INFO, "Using default config values.");
   }
-
+  Hasher hasher(config.ignore_paths, config.watch_recursive);
+  hasher.loadBaselineFile("baseline.json");
+  logger.log(LOG_INFO, "Hashes were calculated.");
   int fd = inotify_init();
-  int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE);
+  int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
   char buffer[4096];
   while (true) {
     int len = read(fd, buffer, sizeof(buffer));
@@ -38,11 +40,17 @@ int main(int argc, char* argv[]) {
     while (i < len) {
       auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
       if (event->len) {
-        if (event->mask & IN_CREATE) {
-          logger.log(LOG_INFO, "File was created: " + event->name);
+        if (event->mask & IN_CREATE || event->mask & IN_MODIFY) {
+          hasher.fileChanged(event->name, logger);
         }
         if (event->mask & IN_DELETE) {
-          logger.log(LOG_INFO, "File was deleted: " + event->name);
+          hasher.deleteHash(event->name, logger);
+        }
+        if (event->mask & IN_MOVED_FROM) {
+          hasher.fileMoved(event->name, logger, false, event->cookie);
+        }
+        if (event->mask & IN_MOVED_TO) {
+          hasher.fileMoved(event->name, logger, true, event->cookie);
         }
       }
       i += sizeof(inotify_event) + event->len;
