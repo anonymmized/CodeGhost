@@ -3,15 +3,22 @@
 #include <unordered_map>
 #include <string>
 
+struct MoveEvent {
+    std::string old_path;
+    uint64_t hash;
+};
+
 class Hasher {
     private:
         std::unordered_map<std::string, uint64_t> table;
         std::unordered_map<std::string, uint64_t> baseline;
         std::vector<std::string> ignore_paths;
+        std::unordered_map<uint32_t, MoveEvent> move_buffer;
         bool recursive = true;
     public:
         Hasher(std::vector<std::string>& _ignore_paths,
-               bool _recursive) : table(), baseline(), ignore_paths(_ignore_paths), recursive(_recursive) {}
+               bool _recursive,
+               std::unordered_map<uint32_t, MoveEvent> _move_buffer) : table(), baseline(), ignore_paths(_ignore_paths), recursive(_recursive) {}
         uint64_t calcHash(const std::string& path); // calculate file's hash on 'path'
         void loadBaselineFile(const std::string& path); // load baseline in table in start
         bool compareHashes(const uint64_t& old_hash, const std::string& path); // compare two hashes
@@ -22,4 +29,6 @@ class Hasher {
         void initHashes(const Config& conf, const std::string& path); // upload new changes to baseline.json
         void deleteHash(const std::string& path, Logger& logger); // handle file deletion
         void fileChanged(const std::string& path, Logger& logger); // handle file editing or creating
+        void fileMoved(const std::string& path, Logger& logger, bool moved, uint32_t& cookie); // handle IN_MOVED_FROM and IN_MOVED_TO
+        void updateHash(const std::string& path, const uint64_t new_hash); // just update file's hash in table without erasing it
 };

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 #include "daemon.hpp"
+#include "logger.hpp"
 
 using json = nlohmann::ordered_json;
 
@@ -14,6 +15,58 @@ using json = nlohmann::ordered_json;
  * [ table is a current system state. it changes until admin accept changes and then baseline updates with table ]
  * [ ignore_paths and recursion variables are using for better code readability ]
 */
+
+/* this function is used to check changed metadata parts
+void Hasher::fileAttributed(const std::string& path, Logger& logger) {
+    if (!std::filesystem::exists(path)) return;
+    uint64_t check_hash = calcHash(path);
+
+    auto it = baseline.find(path);
+    if (it != baseline.end()) {
+        uint64_t old_hash = it->second;
+        if (old_hash != check_hash) {
+            table[path] = check_hash;
+            logger.log(LOG_INFO, "File's attribute and content were changed: " + path);
+        } else {
+            logger.log(LOG_INFO, "File's attribute were changed: " + path);
+        }
+    }
+}
+*/
+
+void Hasher::updateHash(const std::string& path, const uint64_t new_hash) {
+    auto it = table.find(path);
+    if (it != table.end()) {
+        it->second = new_hash;
+    } else {
+        table[path] = new_hash;
+    }
+}
+// 'MoveEvent' saves previous changes like IN_MOVED_TO and IN_MOVED_FROM to undrestand what is going on with file
+// 'moved' flag handles event: IN_MOVED_FROM - false | IN_MOVED_TO - true. It used to understand what action need to handle
+// 'cookie' is a unique identifier for IN_MOVED_TO and IN_MOVED_FROM pair
+void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint32_t& cookie) {
+    if (!moved) {
+        MoveEvent tempEvent; //
+        tempEvent.old_path = path;
+        tempEvent.hash = calcHash(path);
+        move_buffer[cookie] = tempEvent;
+    } else {
+        auto it = move_buffer.find(cookie);
+        if (it != move_buffer.end()) {
+            std::string old_path = it->second.old_path;
+            uint64_t old_hash = it->second.hash;
+            uint64_t new_hash = calcHash(path);
+
+            deleteHash(path, logger);
+            updateHash(path, new_hash);
+            logger.log(LOG_INFO, "Moved:" + old_path + " > " + path);
+            move_buffer.erase(it);
+        } else {
+            fileChanged(path, logger);
+        }
+    }
+}
 
 void Hasher::fileChanged(const std::string& path, Logger& logger) {
     if (!std::filesystem::exists(path)) return;

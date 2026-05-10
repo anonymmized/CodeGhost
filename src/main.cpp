@@ -46,6 +46,12 @@ int main(int argc, char* argv[]) {
         if (event->mask & IN_DELETE) {
           hasher.deleteHash(event->name, logger);
         }
+        if (event->mask & IN_MOVED_FROM) {
+          hasher.fileMoved(event->name, logger, false, event->cookie);
+        }
+        if (event->mask & IN_MOVED_TO) {
+          hasher.fileMoved(event->name, logger, true, event->cookie);
+        }
       }
       i += sizeof(inotify_event) + event->len;
     }
