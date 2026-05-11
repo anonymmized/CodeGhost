@@ -13,6 +13,8 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
       args.configPath = arg.substr(9);
     } else if (arg.rfind("--log", 0) == 0) {
       args.logPath = arg.substr(6);
+    } else if (arg.rfind("--aspects", 0) == 0) {
+      args.ignorePath = args.substr(10);
     } else {
       std::cerr << "Unknown argument" << arg << std::endl;
       printUsage();
@@ -32,5 +34,8 @@ void CliParser::printUsage() {
   std::cout << "Usage: security-analyzer" << " --config=<path> [--daemonise]\n"
     << " --config=<path>  path to config file json\n"
     << " --daemonise      run as background daemon\n"
-    << " --log=<path>     path to log file (dafault: daemon.log)";
+    << " --log=<path>     path to log file (dafault: daemon.log)"
+    << " --ignore=<path>  path to file includes ignored files list";
 }
+
+

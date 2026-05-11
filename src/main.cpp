@@ -5,7 +5,7 @@
 
 int main(int argc, char* argv[]) {
   CliArgs args = CliParser::parse(argc, argv);
-
+  std::unordered_map<std::string, std::vector<std::string>> allin = parseICW(args.partsPath);
   if (args.daemonize) daemonise();
   Logger logger(args.logPath, LOG_INFO, LOG_INFO, true, true);
   logger.log(LOG_INFO, "Logging to: " + args.logPath);
@@ -16,9 +16,9 @@ int main(int argc, char* argv[]) {
 
     if (config.watch_paths.empty() && config.critical_paths.empty()) {
       logger.log(LOG_WARN, "No paths were provided. Using default ones...");
-      config.watch_paths = {"/var/", "/etc/", ".", "/root/"};
-      config.ignore_paths = {"/tmp/", "/var/"};
-      config.critical_paths = {"/boot/", "/etc/"};
+      config.watch_paths = allin["watch"];
+      config.ignore_paths = allin["ignore"];
+      config.critical_paths = allin["critical"];
       config.watch_recursive = true;
     }
   } catch (const std::runtime_error& e) {
