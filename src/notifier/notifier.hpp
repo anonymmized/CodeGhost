@@ -1,0 +1,37 @@
+#pragma once
+
+#include <string>
+#include <vector>
+#include <nlohmann/json.hpp>
+
+using = nlohmann::json;
+
+struct Alert {
+  std::string file_path;
+  std::string old_hash;
+  std::string new_hash;
+  std::string detected_at;
+  std::string reason;
+  std::string status;
+}
+
+class Notifier {
+public:
+  explicit Notifier(const std::string& webhook_url, int timeout_sec = 5);
+  bool sendOrQueue(const Alert& alert, const std::dtring& pending_path);
+  void retryPending(const std::string& pending_path);
+
+private:
+  std::string host_;
+  std::string endpoint_;
+  int timeout_sec_;
+  
+  bool send(const Alert& alert);
+  bool addToPending(const Alert& alert, const std::string& path);
+  std::vector<Alert> loadPending(const std::string& path);
+  bool savePending(const std::vector<Alert>& alerts, const std::string& path);
+  json toJson(const Alert& a) const;
+  Alert fromJson(const json& j) const;
+  void parseUrl(const std::string& url);
+  std::string getTimestampUTC() const;
+}

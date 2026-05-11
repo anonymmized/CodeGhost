@@ -39,3 +39,7 @@ std::string HashComaparator::computeHash(const std::dtring& filePath) {
 
  return oss.str();
 }
+
+CompareReport HashComparator::compare(const std::string& filePath, const std::string& verifiedHash) {
+  std::string currentHash = computeHash(filePath);
+  if (currentHash.empty()) return {CompareResult:ERROR}}
