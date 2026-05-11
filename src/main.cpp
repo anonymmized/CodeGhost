@@ -5,13 +5,17 @@
 
 int main(int argc, char* argv[]) {
   CliArgs args = CliParser::parse(argc, argv);
-  std::unordered_map<std::string, std::vector<std::string>> allin = parseICW(args.partsPath);
-  if (args.daemonize) daemonise();
+  std::unordered_map<std::string, std::vector<std::string>> allin;
+  if (!args.partsPath.empty()) {
+    allin = parseICW(args.partsPath);
+  }
+  if (args.daemonise) daemonise();
   Logger logger(args.logPath, LOG_INFO, LOG_INFO, true, true);
   logger.log(LOG_INFO, "Logging to: " + args.logPath);
   logger.log(LOG_INFO, std::string(argv[0]) + " started.");
+  Config config;
   try {
-    Config config = loadFromConfig(args.configPath);
+    config = loadFromConfig(args.configPath);
     logger.log(LOG_INFO, "Config is loaded. Recursive: " + std::to_string(config.watch_recursive));
 
     if (config.watch_paths.empty() && config.critical_paths.empty()) {

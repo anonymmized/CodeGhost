@@ -3,6 +3,46 @@
 #include <cstring>
 #include <cstdlib>
 
+std::unordered_map<std::string, std::vector<std::string>> parseICW(const std::string& path) {
+  std::ifstream infile(path);
+  if (!infile.is_open())
+    throw std::runtime_error("File wasn't opened");
+  std::string line;
+  int state = -1; // 0 - IGNORE 1 - CRIT 2 - WATCH
+  std::unordered_map<std::string, std::vector<std::string>> allin;
+  std::vector<std::string> to_ignore;
+  std::vector<std::string> critical;
+  std::vector<std::string> to_watch;
+  while (std::getline(infile, line)) {
+    if (line == "[IGNORE]") {
+      state = 0;
+      continue;
+    } else if (line == "[CRIT]") {
+      state = 1;
+      continue;
+    } else if (line == "[WATCH]") {
+      state = 2;
+      continue;
+    } else {
+      if (line.empty() || line[0] == '#') continue;
+      if (state == -1) {
+        continue;
+      } else if (state == 1) {
+        to_ignore.push_back(line);
+      } else if (state == 1) {
+        critical.push_back(line);
+      } else if (state == 2) {
+        to_watch.push_back(line);
+      }
+    }
+  }
+  infile.close();
+  allin["ignore"] = to_ignore;
+  allin["critical"] = critical;
+  allin["watch"] = to_watch;
+  return allin;
+}
+
 CliArgs CliParser::parse(int argc, char* argv[]) {
   CliArgs args;
   for (int i = 1; i < argc; i++) {
@@ -13,8 +53,8 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
       args.configPath = arg.substr(9);
     } else if (arg.rfind("--log", 0) == 0) {
       args.logPath = arg.substr(6);
-    } else if (arg.rfind("--aspects", 0) == 0) {
-      args.ignorePath = args.substr(10);
+    } else if (arg.rfind("--rules", 0) == 0) {
+      args.partsPath = arg.substr(8);
     } else {
       std::cerr << "Unknown argument" << arg << std::endl;
       printUsage();
@@ -24,7 +64,7 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
       args.configPath = std::getenv("CONFIG_PATH_SEC_ANALYZER");
     }
     if (args.logPath.empty())
-      args.logPath("daemon.log");
+      args.logPath = "daemon.log";
   }
   return args;
 }
@@ -35,7 +75,7 @@ void CliParser::printUsage() {
     << " --config=<path>  path to config file json\n"
     << " --daemonise      run as background daemon\n"
     << " --log=<path>     path to log file (dafault: daemon.log)"
-    << " --ignore=<path>  path to file includes ignored files list";
+    << " --rules=<path>   path to file includes ignored|critical|watching files list";
 }
 
 
