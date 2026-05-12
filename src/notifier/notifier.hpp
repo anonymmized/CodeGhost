@@ -8,8 +8,8 @@ using = nlohmann::json;
 
 struct Alert {
   std::string file_path;
-  std::string old_hash;
-  std::string new_hash;
+  uint64_t old_hash;
+  uint64_t new_hash;
   std::string detected_at;
   std::string reason;
   std::string status;
