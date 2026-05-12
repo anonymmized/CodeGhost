@@ -1,5 +1,4 @@
 #include "notifier.hpp"
-#include "../core/logger.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -77,3 +76,55 @@ bool Notifier::send(const Alert& alert, Logger& logger) {
   return false;
 }
 
+std::vector<Alert> Notifier::loadPending(const std::string& path) {
+  std::vector<Alert> result;
+  std::ifstream in(path);
+  if (!in.is_open()) return result;
+  
+  json arr;
+  try {
+    in >> arr;
+  } catch (...) {
+    std::cerr << "Notifier: pending.json is corrupted\n";
+    return result;
+  }
+  
+  for (const auto& item : arr) result.push_back(fromJson(item));
+  return result;
+}
+
+bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& path) {
+  std::string tmp = path + ".tmp";
+ // atomic write for save adding 
+  {
+    std::ofstream out(tmp);
+    if (!out.open()) {
+      std::cerr << "Notifier: cannot write to " << tmp << endl;
+      return false;
+    }
+    json arr = json::array();
+    for (const auto& a : alerts) arr.push_back(toJson(a));
+    out << arr.dump(4);
+  }
+  
+  std::error_code ec;
+  std::filesystem::rename(tmp, path, ec);
+  if (ec) {
+    std::cerr << "Notifier: failed to rename tmp file " << tmp 
+	      << ", error message " << ec.message() << endl;
+    return false;
+  }
+  return true;
+}
+
+bool Notifier::addToPending(const Alert& alert, const std::string& path) {
+  auto alerts = loadPending(path);
+  for (const auto& a : alerts) {
+    if (a.file_path == alert.file_path){
+      a = alert;
+      return savePending(alerts, path);;
+    }
+  }
+  alerts.push_back(alert);
+  return savePending(alerts, path);
+}
