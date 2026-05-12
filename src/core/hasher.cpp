@@ -116,7 +116,7 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
     return false;
 }
 
-// helper to doublecode sectors
+// helper to doublecode sectors for function calcDirHashes
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         if (!std::filesystem::is_regular_file(entry.path())) return;
