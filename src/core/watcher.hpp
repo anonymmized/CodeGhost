@@ -23,4 +23,5 @@ class Watcher {
         void addWatch(const std::string& path);
         int getFd();
         bool hasWatch(int wd);
+        void removeWatcher(int wd);
 };

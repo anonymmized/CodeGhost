@@ -5,8 +5,6 @@
 #include "./utils/utils.hpp"
 #include <filesystem>
 
-
-
 int main(int argc, char* argv[]) {
   CliArgs args = CliParser::parse(argc, argv);
   std::unordered_map<std::string, std::vector<std::string>> allin;
@@ -57,7 +55,12 @@ int main(int argc, char* argv[]) {
           continue;
         }
         std::string full_path = watcher.getFullPath(event->wd, std::string(event->name));
-        if (event->mask & (IN_CREATE | IN_MODIFY)) {
+        if (event->mask & IN_CREATE) {
+          if (std::filesystem::exists(full_path) && std::filesystem::is_directory(full_path))
+            watcher.registerRecursive(full_path);
+          hasher.fileChanged(full_path, logger);
+        }
+        if (event->mask & IN_MODIFY) {
           hasher.fileChanged(full_path, logger);
         }
         if (event->mask & IN_DELETE) {
@@ -68,6 +71,9 @@ int main(int argc, char* argv[]) {
         }
         if (event->mask & IN_MOVED_TO) {
           hasher.fileMoved(full_path, logger, true, event->cookie);
+        }
+        if (event->mask & IN_DELETE) {
+          watcher.removeWatcher(event->wd);
         }
       }
       i += sizeof(inotify_event) + event->len;

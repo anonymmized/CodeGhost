@@ -3,14 +3,21 @@
 #include <vector>
 #include <unordered_map>
 #include <sys/inotify.h>
+#include <stdexcept>
 #include "../utils/utils.hpp"
 
 void Watcher::addWatch(const std::string& path) {
     int wd = inotify_add_watch(main_fd, path, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+    if (wd < 0)
+        throw std::runtime_error("Failed to add watch for path: " + path);
     watch_table[wd] = path;
 }
 
-void Watcher::init_fd() { main_fd = inotify_init(); }
+void Watcher::init_fd() {
+    main_fd = inotify_init();
+    if (main_fd < 0)
+        throw std::runtime_error("Failed to add watch for path: " + path);
+}
 int Watcher::getFd() { return main_fd; }
 bool Watcher::hasWatch(int wd) {
     auto it = watch_table.find(wd);
@@ -31,7 +38,15 @@ void Watcher::registerRecursive(const std::string& fpath) {
 }
 std::string Watcher::getFullPath(int wd, const std::string& filename) {
     auto it = watch_table.find(wd);
-    if (t == watch_table.end()) return "";
+    if (it == watch_table.end()) return "";
     if (filename.empty()) return it->second;
     return it->second + "/" + filename;
+}
+
+void Watcher::removeWatcher(int wd) {
+    auto it = watch_table.find(wd);
+    if (it != watch_table.end()) {
+        inotify_rm_watch(main_fd, wd);
+        watch_table.erase(wd);
+    }
 }
