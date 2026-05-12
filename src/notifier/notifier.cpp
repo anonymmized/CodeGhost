@@ -57,3 +57,21 @@ Alert Notifier::fromJson(const json& j) const {
   a.status = j.value("status", "pending");
   return a;
 }
+
+bool Notifier::send(const Alert& alert) {
+  if (host_.empty()) {
+    str::cerr << "Notifier: webhook host is not ser\n";
+    return false;
+  }
+  httplib::Client client(host_);
+  client.set_connection_timeout(timeout_sec_, 0);
+  client.set_read_timeout(timeout_sec_, 0);
+  
+  auto res = client.Post(endpoint_, toJson(alert).dump(), "application/json");
+  if (res && res->status == 200) {
+    std__cout << "Notifier: sent alert for " << alert.file_path << endl;
+    return true;
+  }
+  std::cerr << "Notifier: failed to send alert for " << alert.file_path << endl;
+  return false;
+}
