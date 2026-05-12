@@ -7,7 +7,7 @@
 #include "../utils/utils.hpp"
 
 void Watcher::addWatch(const std::string& path) {
-    int wd = inotify_add_watch(main_fd, path, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+    int wd = inotify_add_watch(main_fd, path.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
     if (wd < 0)
         throw std::runtime_error("Failed to add watch for path: " + path);
     watch_table[wd] = path;
@@ -16,7 +16,7 @@ void Watcher::addWatch(const std::string& path) {
 void Watcher::init_fd() {
     main_fd = inotify_init();
     if (main_fd < 0)
-        throw std::runtime_error("Failed to add watch for path: " + path);
+        throw std::runtime_error("Failed to inirialize inotify");
 }
 int Watcher::getFd() { return main_fd; }
 bool Watcher::hasWatch(int wd) {
