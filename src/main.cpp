@@ -36,39 +36,27 @@ int main(int argc, char* argv[]) {
     logger.log(LOG_ERROR, "Reading from config failed for no reason.");
     logger.log(LOG_INFO, "Using default config values.");
   }
+  Watcher watcher(config);
   Hasher hasher(config.ignore_paths, config.watch_recursive);
   hasher.loadBaselineFile("baseline.json");
   logger.log(LOG_INFO, "Hashes were calculated.");
-  int fd = inotify_init();
-  std::unordered_map<int, std::string> watch_table;
   if (config.watch_recursive) {
-    for (const auto& file : config.watch_paths) {
-      if (shouldIgnoreTree(file, config.ignore_paths)) continue;
-      int wd = inotify_add_watch(fd, file, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
-      watch_table[wd] = file;
-      for (const auto& ifile : std::filesystem::recursive_directory_iterator(file)) {
-        if (std::filesystem::is_directory(ifile)) {
-          if (!shouldIgnoreTree(ifile, config.ignore_paths)) {
-            int wd = inotify_add_watch(fd, ifile, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
-            watch_table[wd] = ifile;
-          }
-        }
+      for (const auto& path : config.watch_paths) {
+        watcher.registerRecursive(path);
       }
-    }
   }
   char buffer[4096];
   while (true) {
-    int len = read(fd, buffer, sizeof(buffer));
+    int len = read(watcher.getFd(), buffer, sizeof(buffer));
     int i = 0;
     while (i < len) {
       auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
       if (event->len) {
-        auto it = watch_table.find(event->wd);
-        if (it == watch_table.end()) {
+        if (!watcher.hasWatch(event->wd)) {
           i += sizeof(inotify_event) + event->len;
           continue;
         }
-        std::string full_path = watch_table[event->wd] + "/" + event->name;
+        std::string full_path = watcher.getFullPath(event->wd, std::string(event->name));
         if (event->mask & (IN_CREATE | IN_MODIFY)) {
           hasher.fileChanged(full_path, logger);
         }
