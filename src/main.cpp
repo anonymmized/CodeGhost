@@ -2,6 +2,8 @@
 #include "./core/daemon.hpp"
 #include "./core/hasher.hpp"
 #include "./core/logger.hpp"
+#include "./utils/utils.hpp"
+#include <filesystem>
 
 int main(int argc, char* argv[]) {
   CliArgs args = CliParser::parse(argc, argv);
@@ -32,29 +34,46 @@ int main(int argc, char* argv[]) {
     logger.log(LOG_ERROR, "Reading from config failed for no reason.");
     logger.log(LOG_INFO, "Using default config values.");
   }
+  Watcher watcher(config);
   Hasher hasher(config.ignore_paths, config.watch_recursive);
   hasher.loadBaselineFile("baseline.json");
   logger.log(LOG_INFO, "Hashes were calculated.");
-  int fd = inotify_init();
-  int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+  if (config.watch_recursive) {
+      for (const auto& path : config.watch_paths) {
+        watcher.registerRecursive(path);
+      }
+  }
   char buffer[4096];
   while (true) {
-    int len = read(fd, buffer, sizeof(buffer));
+    int len = read(watcher.getFd(), buffer, sizeof(buffer));
     int i = 0;
     while (i < len) {
       auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
       if (event->len) {
-        if (event->mask & IN_CREATE || event->mask & IN_MODIFY) {
-          hasher.fileChanged(event->name, logger);
+        if (!watcher.hasWatch(event->wd)) {
+          i += sizeof(inotify_event) + event->len;
+          continue;
+        }
+        std::string full_path = watcher.getFullPath(event->wd, std::string(event->name));
+        if (event->mask & IN_CREATE) {
+          if (std::filesystem::exists(full_path) && std::filesystem::is_directory(full_path))
+            watcher.registerRecursive(full_path);
+          hasher.fileChanged(full_path, logger);
+        }
+        if (event->mask & IN_MODIFY) {
+          hasher.fileChanged(full_path, logger);
         }
         if (event->mask & IN_DELETE) {
-          hasher.deleteHash(event->name, logger);
+          hasher.deleteHash(full_path, logger);
         }
         if (event->mask & IN_MOVED_FROM) {
-          hasher.fileMoved(event->name, logger, false, event->cookie);
+          hasher.fileMoved(full_path, logger, false, event->cookie);
         }
         if (event->mask & IN_MOVED_TO) {
-          hasher.fileMoved(event->name, logger, true, event->cookie);
+          hasher.fileMoved(full_path, logger, true, event->cookie);
+        }
+        if (event->mask & IN_DELETE) {
+          watcher.removeWatcher(event->wd);
         }
       }
       i += sizeof(inotify_event) + event->len;

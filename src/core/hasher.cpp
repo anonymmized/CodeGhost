@@ -99,7 +99,7 @@ uint64_t Hasher::calcHash(const std::string& path) {
     return hash;
 }
 
-void loadBaselineFile(const std::string& path) {
+void Hasher::loadBaselineFile(const std::string& path) {
     baseline = loadBaseline(path);
     table = baseline;
 }
@@ -116,7 +116,7 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
     return false;
 }
 
-// helper to doublecode sectors
+// helper to doublecode sectors for function calcDirHashes
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         if (!std::filesystem::is_regular_file(entry.path())) return;
