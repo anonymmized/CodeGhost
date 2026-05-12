@@ -2,6 +2,18 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <string>
+#include <cctype>
+#include <algorithm>
+
+std::string trimmed(const std::string& str) {
+    auto first = std::find_if_not(str.begin(), str.end(),
+                                  [](unsigned char c){ return std::isspace(c); });
+    auto last = std::find_if_not(str.rbegin(), str.rend(),
+                                  [](unsigned char c){ return std::isspace(c); }).base();
+    if (first >= last) return {};
+    return std::string(first, last);
+}
 
 std::unordered_map<std::string, std::vector<std::string>> parseICW(const std::string& path) {
   std::ifstream infile(path);
@@ -14,6 +26,7 @@ std::unordered_map<std::string, std::vector<std::string>> parseICW(const std::st
   std::vector<std::string> critical;
   std::vector<std::string> to_watch;
   while (std::getline(infile, line)) {
+    line = trimmed(line);
     if (line == "[IGNORE]") {
       state = 0;
       continue;
@@ -27,7 +40,7 @@ std::unordered_map<std::string, std::vector<std::string>> parseICW(const std::st
       if (line.empty() || line[0] == '#') continue;
       if (state == -1) {
         continue;
-      } else if (state == 1) {
+      } else if (state == 0) {
         to_ignore.push_back(line);
       } else if (state == 1) {
         critical.push_back(line);
