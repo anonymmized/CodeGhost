@@ -99,7 +99,7 @@ uint64_t Hasher::calcHash(const std::string& path) {
     return hash;
 }
 
-void loadBaselineFile(const std::string& path) {
+void Hasher::loadBaselineFile(const std::string& path) {
     baseline = loadBaseline(path);
     table = baseline;
 }

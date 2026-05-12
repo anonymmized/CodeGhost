@@ -2,6 +2,10 @@
 #include "./core/daemon.hpp"
 #include "./core/hasher.hpp"
 #include "./core/logger.hpp"
+#include "./utils/utils.hpp"
+#include <filesystem>
+
+
 
 int main(int argc, char* argv[]) {
   CliArgs args = CliParser::parse(argc, argv);
@@ -36,7 +40,22 @@ int main(int argc, char* argv[]) {
   hasher.loadBaselineFile("baseline.json");
   logger.log(LOG_INFO, "Hashes were calculated.");
   int fd = inotify_init();
-  int wd = inotify_add_watch(fd, "./", IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+  std::unordered_map<int, std::string> watch_table;
+  if (config.watch_recursive) {
+    for (const auto& file : config.watch_paths) {
+      if (shouldIgnoreTree(file, config.ignore_paths)) continue;
+      int wd = inotify_add_watch(fd, file, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+      watch_table[wd] = file;
+      for (const auto& ifile : std::filesystem::recursive_directory_iterator(file)) {
+        if (std::filesystem::is_directory(ifile)) {
+          if (!shouldIgnoreTree(ifile, config.ignore_paths)) {
+            int wd = inotify_add_watch(fd, ifile, IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+            watch_table[wd] = ifile;
+          }
+        }
+      }
+    }
+  }
   char buffer[4096];
   while (true) {
     int len = read(fd, buffer, sizeof(buffer));
@@ -44,17 +63,23 @@ int main(int argc, char* argv[]) {
     while (i < len) {
       auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
       if (event->len) {
-        if (event->mask & IN_CREATE || event->mask & IN_MODIFY) {
-          hasher.fileChanged(event->name, logger);
+        auto it = watch_table.find(event->wd);
+        if (it == watch_table.end()) {
+          i += sizeof(inotify_event) + event->len;
+          continue;
+        }
+        std::string full_path = watch_table[event->wd] + "/" + event->name;
+        if (event->mask & (IN_CREATE | IN_MODIFY)) {
+          hasher.fileChanged(full_path, logger);
         }
         if (event->mask & IN_DELETE) {
-          hasher.deleteHash(event->name, logger);
+          hasher.deleteHash(full_path, logger);
         }
         if (event->mask & IN_MOVED_FROM) {
-          hasher.fileMoved(event->name, logger, false, event->cookie);
+          hasher.fileMoved(full_path, logger, false, event->cookie);
         }
         if (event->mask & IN_MOVED_TO) {
-          hasher.fileMoved(event->name, logger, true, event->cookie);
+          hasher.fileMoved(full_path, logger, true, event->cookie);
         }
       }
       i += sizeof(inotify_event) + event->len;
