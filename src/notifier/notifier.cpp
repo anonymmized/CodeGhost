@@ -1,4 +1,5 @@
 #include "notifier.hpp"
+#include "../core/logger.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -58,7 +59,7 @@ Alert Notifier::fromJson(const json& j) const {
   return a;
 }
 
-bool Notifier::send(const Alert& alert) {
+bool Notifier::send(const Alert& alert, Logger& logger) {
   if (host_.empty()) {
     str::cerr << "Notifier: webhook host is not ser\n";
     return false;
@@ -69,9 +70,10 @@ bool Notifier::send(const Alert& alert) {
   
   auto res = client.Post(endpoint_, toJson(alert).dump(), "application/json");
   if (res && res->status == 200) {
-    std__cout << "Notifier: sent alert for " << alert.file_path << endl;
+    logger.log(LOG_INFO, "Notifier: sent alert for " +  alert.file_path)
     return true;
   }
   std::cerr << "Notifier: failed to send alert for " << alert.file_path << endl;
   return false;
 }
+

@@ -13,7 +13,7 @@ struct Alert {
   std::string detected_at;
   std::string reason;
   std::string status;
-}
+}auto res = client.Post(endpoint_, toJson(alert).dump(), "application/json");
 
 class Notifier {
 public:
@@ -26,7 +26,7 @@ private:
   std::string endpoint_;
   int timeout_sec_;
   
-  bool send(const Alert& alert);
+  bool send(const Alert& alert, Logger& logger);
   bool addToPending(const Alert& alert, const std::string& path);
   std::vector<Alert> loadPending(const std::string& path);
   bool savePending(const std::vector<Alert>& alerts, const std::string& path);
