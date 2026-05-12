@@ -12,10 +12,10 @@ Notifier::Notifier(const std::string& webhook_url, int timeout_sec) : timeout_se
   parseUrl(webhook_url);
 }
 
-Notifier::parseUrl(const std::string& url) {
+void Notifier::parseUrl(const std::string& url) {
   std::string scheme_sep = "://";
   auto scheme_end = url.find(scheme_sep);
-  size_t search_from = (scheme_end == str::string::npos) ? 0 : scheme_end + scheme_sep.length();
+  size_t search_from = (scheme_end == std::string::npos) ? 0 : scheme_end + scheme_sep.length();
   auto path_start = url.find("/", search_from);
   if (path_start == std::string::npos) {
     host_ = url;
@@ -26,7 +26,7 @@ Notifier::parseUrl(const std::string& url) {
   }
 }
 
-std::string Notofier::getTimestampUTC() const {
+std::string Notifier::getTimestampUTC() const {
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);
   std::tm tm{};
@@ -41,7 +41,7 @@ json Notifier::toJson(const Alert& a) const {
     {"file_path", a.file_path},
     {"old_hash", std::to_string(a.old_hash)},
     {"new_hash", std::to_string(a.new_hash)},
-    {"detected_at", a.detected_at.empty() ? getTimestampUTL() : a.detected_at},
+    {"detected_at", a.detected_at.empty() ? getTimestampUTC() : a.detected_at},
     {"reason", a.reason},
     {"status", a.status}
   };
@@ -58,9 +58,9 @@ Alert Notifier::fromJson(const json& j) const {
   return a;
 }
 
-bool Notifier::send(const Alert& alert, Logger& logger) {
+bool Notifier::send(const Alert& alert) {
   if (host_.empty()) {
-    str::cerr << "Notifier: webhook host is not ser\n";
+    std::cerr << "Notifier: webhook host is not ser\n";
     return false;
   }
   httplib::Client client(host_);
@@ -69,10 +69,10 @@ bool Notifier::send(const Alert& alert, Logger& logger) {
   
   auto res = client.Post(endpoint_, toJson(alert).dump(), "application/json");
   if (res && res->status == 200) {
-    logger.log(LOG_INFO, "Notifier: sent alert for " +  alert.file_path)
+    logger.log(LOG_INFO, "Notifier: sent alert for " +  alert.file_path);
     return true;
   }
-  std::cerr << "Notifier: failed to send alert for " << alert.file_path << endl;
+  std::cerr << "Notifier: failed to send alert for " << alert.file_path << std::endl;
   return false;
 }
 
@@ -98,8 +98,8 @@ bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& 
  // atomic write for save adding 
   {
     std::ofstream out(tmp);
-    if (!out.open()) {
-      std::cerr << "Notifier: cannot write to " << tmp << endl;
+    if (!out.is_open()) {
+      std::cerr << "Notifier: cannot write to " << tmp << std::endl;
       return false;
     }
     json arr = json::array();
@@ -111,7 +111,7 @@ bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& 
   std::filesystem::rename(tmp, path, ec);
   if (ec) {
     std::cerr << "Notifier: failed to rename tmp file " << tmp 
-	      << ", error message " << ec.message() << endl;
+	      << ", error message " << ec.message() << std::endl;
     return false;
   }
   return true;
@@ -119,12 +119,33 @@ bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& 
 
 bool Notifier::addToPending(const Alert& alert, const std::string& path) {
   auto alerts = loadPending(path);
-  for (const auto& a : alerts) {
+  for (auto& a : alerts) {
     if (a.file_path == alert.file_path){
       a = alert;
-      return savePending(alerts, path);;
+      return savePending(alerts, path);
     }
   }
   alerts.push_back(alert);
   return savePending(alerts, path);
 }
+
+bool Notifier::sendOrQueue(const Alert& alert, const std::string& pending_path) {
+  if (send(alert, logger)) return true;
+  return addToPending(alert, pending_path);
+}
+
+void Notifier::retryPending(const std::string& pending_path) {
+  auto alerts = loadPending(pending_path);
+  if (alerts.empty()) return;
+
+  std::vector<Alert> still_pending;
+  for (const auto& a : alerts) {
+    if (!send(alert, logger)) {
+      still_pending.push_back(alert);
+    }
+  }
+  savePending(still_pending, pending_path);
+}
+
+
+

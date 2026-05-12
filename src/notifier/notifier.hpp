@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core/logger.hpp"
+// #include "../core/logger.hpp"
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -19,7 +19,7 @@ struct Alert {
 class Notifier {
 public:
   explicit Notifier(const std::string& webhook_url, int timeout_sec = 5);
-  bool sendOrQueue(const Alert& alert, const std::dtring& pending_path);
+  bool sendOrQueue(const Alert& alert, const std::string& pending_path);
   void retryPending(const std::string& pending_path);
 
 private:
@@ -27,7 +27,7 @@ private:
   std::string endpoint_;
   int timeout_sec_;
   
-  bool send(const Alert& alert, Logger& logger);
+  bool send(const Alert& alert);
   bool addToPending(const Alert& alert, const std::string& path);
   std::vector<Alert> loadPending(const std::string& path);
   bool savePending(const std::vector<Alert>& alerts, const std::string& path);
