@@ -126,7 +126,8 @@ bool Notifier::changePending(const Alert& alert, Action action, const std::strin
       return savePending(pending_, pending_path);
     }
   }
-  if (action == CHANGE) pending_.push_back(alert);
+  if (action == REMOVE) return true; 
+  pending_.push_back(alert);
   return savePending(pending_, pending_path);
 }
 
