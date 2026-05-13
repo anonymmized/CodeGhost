@@ -1,5 +1,4 @@
 #include "notifier.hpp"
-#include "../core/logger.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -61,7 +60,7 @@ Alert Notifier::fromJson(const json& j) const {
 
 bool Notifier::send(const Alert& alert, Logger& logger) {
   if (host_.empty()) {
-    std::cerr << "Notifier: webhook host is not ser\n";
+    std::cerr << "Notifier: webhook host is not service\n";
     return false;
   }
   httplib::Client client(host_);
@@ -119,11 +118,11 @@ bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& 
 }
 
 
-bool Notifier::changePending(const Alert& alert, Action action, const std::string pending_path) {
-  for (auto it = pending_.begin(); it != pending_.end(), it++) {
+bool Notifier::changePending(const Alert& alert, Action action, const std::string& pending_path) {
+  for (auto it = pending_.begin(); it != pending_.end(); it++) {
     if (it->file_path == alert.file_path){
       if (action == CHANGE) *it = alert;
-      else if (action == REMOVE) pending_.erase(alert);
+      else if (action == REMOVE) pending_.erase(it);
       return savePending(pending_, pending_path);
     }
   }
@@ -133,18 +132,18 @@ bool Notifier::changePending(const Alert& alert, Action action, const std::strin
 
 bool Notifier::sendOrQueue(const Alert& alert, const std::string& pending_path, Logger& logger) {
   if (send(alert, logger)) return true;
-  return changePending(alert, CHANGE);
+  return changePending(alert, CHANGE, pending_path);
 }
 
 void Notifier::retryPending(const std::string& pending_path, Logger& logger) {
   if (pending_.empty()) return;
   auto frame = pending_;
   for (const auto& a : frame) {
-    if (send(a, logger)) changePending(a, REMOVE);
+    if (send(a, logger)) changePending(a, REMOVE, pending_path);
   }
 }
 
-void init(std::string& pending_path) {
+void Notifier::init(std::string& pending_path) {
   pending_ = loadPending(pending_path);
 }
 
