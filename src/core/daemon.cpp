@@ -49,7 +49,7 @@ Config loadFromConfig(const std::string& path) {
 }
 
 
-void uploadToConfig(const Config& conf) {
+void uploadToConfig(const Config& conf, const std::string& path) {
     json j;
     for (int i = 0; i < conf.watch_paths.size(); i++) {
         j["watch_paths"].push_back(conf.watch_paths[i]);
@@ -63,7 +63,7 @@ void uploadToConfig(const Config& conf) {
     j["start_hour"] = conf.start_hour;
     j["end_hour"] = conf.end_hour;
     j["watch_recursive"] = conf.watch_recursive;
-    std::ofstream outfile("config.json");
+    std::ofstream outfile(path);
     if (!outfile.is_open()) {
         throw std::runtime_error("The config.json wasn't opened");
     }

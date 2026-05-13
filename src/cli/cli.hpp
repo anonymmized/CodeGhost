@@ -17,6 +17,4 @@ public:
   static void printUsage();
 };
 
-std::unordered_map<std::string, std::vector<std::string>> parseICW(const std::string& path);
-std::string trimmed(const std::string& str);
 

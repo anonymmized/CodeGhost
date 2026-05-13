@@ -5,6 +5,7 @@
 #include "./hasher.hpp"
 #include "./watcher.hpp"
 #include "../utils/utils.hpp"
+#include "./defaults.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -12,35 +13,47 @@
 #include <sys/inotify.h>
 #include <iostream>
 
-void Processor::parseArgs() { args = CliParser::parse(argc, argv); }
-void Processor::uploadAllin() {
-    if (!args.partsPath.empty())
-        allin = parseICW(args.partsPath);
+void Processor::prepareConfig() {
+    std::error_code ec;
+    if (args.configPath.empty()) args.configPath = std::string(DEFAULT_CONFIG_PATH);
+    if (!std::filesystem::exists(args.configPath, ec)) {
+    	logger->log(LOG_WARN, "Config doesn't exist: " + args.configPath);
+	logger->log(LOG_INFO, "Using default config: " + std::string(DEFAULT_CONFIG_PATH));
+	args.configPath = std::string(DEFAULT_CONFIG_PATH);
+    }
+    ec.clear();
+
+    if (!std::filesystem::exists(args.configPath, ec)) {
+    	logger->log(LOG_WARN, "Default config wasn't found. Creating new one...");
+	std::filesystem::path ppath(args.configPath);
+	std::filesystem::path parent = ppath.parent_path();
+	std::filesystem::create_directories(parent, ec);
+	if (ec) {
+	    logger->log(LOG_ERROR, "Failed to create config directory: " + parent.string() + " : " + ec.message());
+	    throw std::runtime_error("Failed to create config directory");
+	}
+	Config new_conf = createDefaultConfig();
+
+    	uploadToConfig(new_conf, std::string(DEFAULT_CONFIG_PATH));
+	logger->log(LOG_INFO, "Default config created: " + args.configPath);
+    }
 }
-void Processor::initLogger() { 
-    std::cout << "LOGPATH[" << args.logPath << "]\n";
+
+void Processor::parseArgs() { args = CliParser::parse(argc, argv); }
+void Processor::initLogger() {
+    if (args.logPath == DEFAULT_LOG_PATH) {
+    	std::filesystem::path ppath(args.logPath);
+	std::filesystem::path parent = ppath.parent_path();
+	std::filesystem::create_directories(parent);
+    }	
     logger = std::make_unique<Logger>(args.logPath, LOG_INFO, LOG_INFO, true, true);
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
 }
 void Processor::initConfig() {
-    try {
-        config = loadFromConfig(args.configPath);
-        logger->log(LOG_INFO, "Config is loaded. Recursive: " + std::to_string(config.watch_recursive));
-        if (config.watch_paths.empty() && config.critical_paths.empty()) {
-            logger->log(LOG_WARN, "No paths were provided. Using default ones...");
-            config.watch_paths = allin["watch"];
-            config.critical_paths = allin["critical"];
-            config.ignore_paths = allin["ignore"];
-            config.watch_recursive = true;
-        }
-    } catch (const std::runtime_error& e) {
-        logger->log(LOG_ERROR, e.what());
-        logger->log(LOG_INFO, "Using default config values.");
-    } catch (...) {
-        logger->log(LOG_ERROR, "Reading from config failed for no reason.");
-        logger->log(LOG_INFO, "Using default config values.");
-    }
+    config = loadFromConfig(args.configPath);
+    logger->log(LOG_INFO, "Config loaded: " + args.configPath);
+    logger->log(LOG_INFO, "Recursive mode: " + std::to_string(config.watch_recursive));
 }
 
 void Processor::initWatcher() { watcher = std::make_unique<Watcher>(config); }
@@ -82,18 +95,18 @@ void Processor::run(int _argc, char** _argv) {
     argv = _argv;
     parseArgs();
 
-    uploadAllin();
-
     if (args.daemonise) daemonise();
     // create and logger and log into marked file
     initLogger();
+
+    prepareConfig();
     // create config with errors handling
     initConfig();
     // create watcher by config
     initWatcher();
     // create hasher by config's vars
     initHasher();
-    hasher->loadBaselineFile("baseline.json");
+    hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
     logger->log(LOG_INFO, "Hashes were calculated.");
     if (config.watch_recursive) {
         for (const auto& path : config.watch_paths) {
@@ -106,6 +119,7 @@ void Processor::run(int _argc, char** _argv) {
 	}
     }
     char buffer[4096];
+    for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
     while (true) {
         int len = read(watcher->getFd(), buffer, sizeof(buffer));
         int i = 0;

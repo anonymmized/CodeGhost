@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 inline constexpr std::string_view BLUE = "\x1b[94m";
 inline constexpr std::string_view YELLOW = "\x1b[33m";
@@ -14,7 +15,6 @@ struct Config {
     std::vector<std::string> watch_paths;
     std::vector<std::string> ignore_paths;
     std::vector<std::string> critical_paths;
-    std::string logpath = "log.log";
     int start_hour;
     int end_hour;
     bool watch_recursive = true;
@@ -22,5 +22,5 @@ struct Config {
 
 void daemonise(bool silent = true);
 Config loadFromConfig(const std::string& path);
-void uploadToConfig(const Config& conf);
+void uploadToConfig(const Config& conf, const std::string& path);
 

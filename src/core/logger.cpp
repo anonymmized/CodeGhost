@@ -43,6 +43,7 @@ void Logger::log(LogLevel level, const std::string& str) {
             file << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
 
         file << strLevels[lvl] << str << '\n';
+	file.flush();
     }
     if (level >= tty_level) {
         if (colored)

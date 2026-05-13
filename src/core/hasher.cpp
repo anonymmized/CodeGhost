@@ -49,7 +49,8 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
     if (!moved) {
         MoveEvent tempEvent; //
         tempEvent.old_path = path;
-        tempEvent.hash = calcHash(path);
+	if (std::filesystem::exists(path))
+            tempEvent.hash = calcHash(path);
         move_buffer[cookie] = tempEvent;
     } else {
         auto it = move_buffer.find(cookie);
@@ -58,7 +59,7 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
             uint64_t old_hash = it->second.hash;
             uint64_t new_hash = calcHash(path);
 
-            deleteHash(path, logger);
+            deleteHash(old_path, logger);
             updateHash(path, new_hash);
             logger.log(LOG_INFO, "Moved:" + old_path + " > " + path);
             move_buffer.erase(it);
@@ -147,14 +148,14 @@ void Hasher::calcDirHashes(const std::string& current_path) {
 }
 
 void Hasher::loadBaseline(const std::string& path) {
-    std::ifstream baseline(path);
-    if (!baseline.is_open())
+    std::ifstream file(path);
+    if (!file.is_open())
         throw std::runtime_error("The baseline.json wasn't opened");
     json j;
-    baseline >> j;
-    table.clear();
+    file >> j;
+    baseline.clear();
     for (const auto& pair : j.items()) {
-        table[pair.key()] = pair.value().get<uint64_t>();
+        baseline[pair.key()] = pair.value().get<uint64_t>();
     }
 }
 

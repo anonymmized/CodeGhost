@@ -24,4 +24,5 @@ class Watcher {
         int getFd();
         bool hasWatch(int wd);
         void removeWatcher(int wd);
+	std::unordered_map<int, std::string> getWatchTable();
 };

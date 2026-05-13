@@ -52,3 +52,5 @@ void Watcher::removeWatcher(int wd) {
         watch_table.erase(wd);
     }
 }
+
+std::unordered_map<int, std::string> Watcher::getWatchTable() { return watch_table; }
