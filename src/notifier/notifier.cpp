@@ -117,35 +117,33 @@ bool Notifier::savePending(const std::vector<Alert>& alerts, const std::string& 
   return true;
 }
 
-bool Notifier::addToPending(const Alert& alert, const std::string& path) {
-  auto alerts = loadPending(path);
-  for (auto& a : alerts) {
-    if (a.file_path == alert.file_path){
-      a = alert;
-      return savePending(alerts, path);
+
+bool Notifier::changePending(const Alert& alert, Action action, const std::string pending_path) {
+  for (auto it = pending_.begin(); it != pending_.end(), it++) {
+    if (it->file_path == alert.file_path){
+      if (action == CHANGE) *it = alert;
+      else if (action == REMOVE) pending_.erase(alert);
+      return savePending(pending_, pending_path);
     }
   }
-  alerts.push_back(alert);
-  return savePending(alerts, path);
+  if (action == CHANGE) pending_.push_back(alert);
+  return savePending(pending_, pending_path);
 }
 
 bool Notifier::sendOrQueue(const Alert& alert, const std::string& pending_path) {
-  if (send(alert, logger)) return true;
-  return addToPending(alert, pending_path);
+  if (send(alert)) return true;
+  return changePending(alert, CHANGE);
 }
 
 void Notifier::retryPending(const std::string& pending_path) {
-  auto alerts = loadPending(pending_path);
-  if (alerts.empty()) return;
-
-  std::vector<Alert> still_pending;
-  for (const auto& a : alerts) {
-    if (!send(alert, logger)) {
-      still_pending.push_back(alert);
-    }
+  if (pending_.empty()) return;
+  auto frame = pending_;
+  for (const auto& a : frame) {
+    if (send(a)) changePending(a, REMOVE);
   }
-  savePending(still_pending, pending_path);
 }
 
-
+void init(std::string& pending_path) {
+  pending_ = loadPending(pending_path);
+}
 
