@@ -1,4 +1,5 @@
 #include "notifier.hpp"
+#include "../core/logger.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -58,7 +59,7 @@ Alert Notifier::fromJson(const json& j) const {
   return a;
 }
 
-bool Notifier::send(const Alert& alert) {
+bool Notifier::send(const Alert& alert, Logger& logger) {
   if (host_.empty()) {
     std::cerr << "Notifier: webhook host is not ser\n";
     return false;
@@ -130,16 +131,16 @@ bool Notifier::changePending(const Alert& alert, Action action, const std::strin
   return savePending(pending_, pending_path);
 }
 
-bool Notifier::sendOrQueue(const Alert& alert, const std::string& pending_path) {
-  if (send(alert)) return true;
+bool Notifier::sendOrQueue(const Alert& alert, const std::string& pending_path, Logger& logger) {
+  if (send(alert, logger)) return true;
   return changePending(alert, CHANGE);
 }
 
-void Notifier::retryPending(const std::string& pending_path) {
+void Notifier::retryPending(const std::string& pending_path, Logger& logger) {
   if (pending_.empty()) return;
   auto frame = pending_;
   for (const auto& a : frame) {
-    if (send(a)) changePending(a, REMOVE);
+    if (send(a, logger)) changePending(a, REMOVE);
   }
 }
 
