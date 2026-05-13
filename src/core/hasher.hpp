@@ -2,6 +2,12 @@
 
 #include <unordered_map>
 #include <string>
+#include <filesystem>
+#include <vector>
+#include <cstdint>
+
+#include "logger.hpp"
+#include "daemon.hpp"
 
 struct MoveEvent {
     std::string old_path;
@@ -16,9 +22,8 @@ class Hasher {
         std::unordered_map<uint32_t, MoveEvent> move_buffer;
         bool recursive = true;
     public:
-        Hasher(std::vector<std::string>& _ignore_paths,
-               bool _recursive,
-               std::unordered_map<uint32_t, MoveEvent> _move_buffer) : table(), baseline(), ignore_paths(_ignore_paths), recursive(_recursive) {}
+        Hasher(const std::vector<std::string>& _ignore_paths,
+               bool _recursive) : ignore_paths(_ignore_paths), recursive(_recursive) {}
         uint64_t calcHash(const std::string& path); // calculate file's hash on 'path'
         void loadBaselineFile(const std::string& path); // load baseline in table in start
         bool compareHashes(const uint64_t& old_hash, const std::string& path); // compare two hashes

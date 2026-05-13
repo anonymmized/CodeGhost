@@ -5,8 +5,8 @@
 #include <xxhash.h>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
-#include "daemon.hpp"
-#include "logger.hpp"
+
+#include "hasher.hpp"
 
 using json = nlohmann::ordered_json;
 
@@ -100,7 +100,7 @@ uint64_t Hasher::calcHash(const std::string& path) {
 }
 
 void Hasher::loadBaselineFile(const std::string& path) {
-    baseline = loadBaseline(path);
+    loadBaseline(path);
     table = baseline;
 }
 
@@ -120,7 +120,7 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         if (!std::filesystem::is_regular_file(entry.path())) return;
-        if (shouldIgnoreDir(entry.path(), ignore_paths)) return;
+        if (shouldIgnoreDir(entry.path())) return;
         std::string wfile = entry.path().string();
         table[wfile] = calcHash(wfile);
     } catch (std::filesystem::filesystem_error& e) {
@@ -137,11 +137,11 @@ void Hasher::calcDirHashes(const std::string& current_path) {
         throw std::runtime_error("Path isn't directory: " + current_path);
     if (recursive) {
         for (const auto& file : std::filesystem::recursive_directory_iterator(current_path)) {
-            processFileEntry(table, file, ignore_paths);
+            processFileEntry(file);
         }
     } else {
         for (const auto& file : std::filesystem::directory_iterator(current_path)) {
-            processFileEntry(table, file, ignore_paths);
+            processFileEntry(file);
         }
     }
 }

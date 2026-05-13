@@ -62,11 +62,11 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
     std::string arg = argv[i];
     if (arg == "--daemonise") {
        args.daemonise = true;
-    } else if (arg.rfind("--config", 0) == 0) {
+    } else if (arg.rfind("--config=", 0) == 0) {
       args.configPath = arg.substr(9);
-    } else if (arg.rfind("--log", 0) == 0) {
+    } else if (arg.rfind("--log=", 0) == 0) {
       args.logPath = arg.substr(6);
-    } else if (arg.rfind("--rules", 0) == 0) {
+    } else if (arg.rfind("--rules=", 0) == 0) {
       args.partsPath = arg.substr(8);
     } else {
       std::cerr << "Unknown argument" << arg << std::endl;
@@ -74,10 +74,14 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
       exit(1);
     }
     if (args.configPath.empty()) {
-      args.configPath = std::getenv("CONFIG_PATH_SEC_ANALYZER");
+      const char* env = std::getenv("CONFIG_PATH_SEC_ANALYZER");
+      if (env) 
+        args.configPath = env;
     }
     if (args.logPath.empty())
       args.logPath = "daemon.log";
+    if (args.configPath.empty())
+      args.configPath = "config.json";
   }
   return args;
 }

@@ -5,7 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
-
+#include <syslog.h>
 
 // constructor: timestamp is flag for using time in logs now (true - default)
 Logger::Logger(const std::string& _path,
@@ -16,10 +16,10 @@ Logger::Logger(const std::string& _path,
     : log_level(_log_level & 0x03),
       tty_level(_tty_level & 0x03),
       colored(_colored ? 1u : 0u),
-      timstamp(_timestamp ? 1u : 0u),
+      timestamp(_timestamp ? 1u : 0u),
       reserved(0),
       path(_path),
-      file(_path, std::ios::app : std::ios::out)
+      file(_path, std::ios::app | std::ios::out)
 {
     if (!file.is_open()) {
         openlog("daemon", LOG_PID | LOG_CONS, LOG_DAEMON);

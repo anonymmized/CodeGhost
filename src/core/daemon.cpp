@@ -8,9 +8,11 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "daemon.hpp"
+
 using json = nlohmann::ordered_json;
 
-void daemonise(bool silent = true) {
+void daemonise(bool silent) {
     pid_t pid = fork();
     if (pid < 0) exit(EXIT_FAILURE);
     if (pid > 0) {

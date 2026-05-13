@@ -1,4 +1,6 @@
 #include "daemon.hpp"
+#include "watcher.hpp"
+
 #include <string>
 #include <vector>
 #include <unordered_map>

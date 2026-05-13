@@ -17,7 +17,8 @@ void Processor::uploadAllin() {
     if (!args.partsPath.empty())
         allin = parseICW(args.partsPath);
 }
-void Processor::initLogger() {
+void Processor::initLogger() { 
+    std::cout << "LOGPATH[" << args.logPath << "]\n";
     logger = std::make_unique<Logger>(args.logPath, LOG_INFO, LOG_INFO, true, true);
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
@@ -99,8 +100,10 @@ void Processor::run(int _argc, char** _argv) {
             watcher->registerRecursive(path);
         }
     } else {
-        if (!shouldIgnoreTree(path, config.ignore_paths))
-            watcher->addWatch(path);
+	for (const auto& path : config.watch_paths) {
+            if (!shouldIgnoreTree(path, config.ignore_paths))
+            	watcher->addWatch(path);
+	}
     }
     char buffer[4096];
     while (true) {

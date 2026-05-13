@@ -3,6 +3,9 @@
 #include <string>
 #include <cstdint>
 #include <array>
+#include <fstream>
+
+#include "daemon.hpp"
 
 enum LogLevel {
     LOG_INFO = 0,
@@ -17,7 +20,7 @@ inline constexpr std::array<std::string_view, 3> strLevels {
     " [ERROR] "
 };
 
-constexpr std::array<std::string_view, 3> LogColors = {
+inline constexpr std::array<std::string_view, 3> LOG_COLORS = {
     BLUE,
     YELLOW,
     RED
@@ -37,10 +40,10 @@ class Logger {
     public:
         uint8_t getLogLevel() { return log_level; }
         uint8_t getTtyLevel() { return tty_level; }
-        uint8_t getColored() { return colred; }
+        uint8_t getColored() { return colored; }
         uint8_t getTimestamp() { return timestamp; }
         uint8_t getReserved() { return reserved; }
-        constexpr Logger(const std::string& _path,
+        Logger(const std::string& _path,
                          uint8_t _log_level = LOG_INFO,
                          uint8_t _tty_level = LOG_INFO,
                          bool _colored = true,
