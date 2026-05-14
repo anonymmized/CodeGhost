@@ -159,9 +159,9 @@ void Hasher::loadBaseline(const std::string& path) {
     }
 }
 
-void Hasher::initHashes(const Config& conf, const std::string& path) {
-    calcDirHashes(path);
-    std::ofstream baseline("baseline.json");
+void Hasher::initHashes(const Config& conf, const std::string& watch_path, const std::string& baseline_path) {
+    calcDirHashes(watch_path);
+    std::ofstream baseline(baseline_path);
     if (!baseline.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
     }

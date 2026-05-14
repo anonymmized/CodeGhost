@@ -106,7 +106,12 @@ void Processor::run(int _argc, char** _argv) {
     initWatcher();
     // create hasher by config's vars
     initHasher();
-    hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
+    if (!std::filesystem::exists(DEFAULT_BASELINE_PATH)) {
+    	std::filesystem::create_directories(std::filesystem::path(DEFAULT_BASELINE_PATH).parent_path());
+	for (const auto& path : config.watch_paths) {
+	    hasher->initHashes(config, path, std::string(DEFAULT_BASELINE_PATH));
+	}
+    } else hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
     logger->log(LOG_INFO, "Hashes were calculated.");
     if (config.watch_recursive) {
         for (const auto& path : config.watch_paths) {

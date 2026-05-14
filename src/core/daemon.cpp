@@ -51,15 +51,9 @@ Config loadFromConfig(const std::string& path) {
 
 void uploadToConfig(const Config& conf, const std::string& path) {
     json j;
-    for (int i = 0; i < conf.watch_paths.size(); i++) {
-        j["watch_paths"].push_back(conf.watch_paths[i]);
-    }
-    for (int i = 0; i < conf.ignore_paths.size(); i++) {
-        j["ignore_paths"].push_back(conf.ignore_paths[i]);
-    }
-    for (int i = 0; i < conf.critical_paths.size(); i++) {
-        j["critical_paths"].push_back(conf.critical_paths[i]);
-    }
+    j["watch_paths"] = conf.watch_paths;
+    j["ignore_paths"] = conf.ignore_paths;
+    j["critical_paths"] = conf.critical_paths;
     j["start_hour"] = conf.start_hour;
     j["end_hour"] = conf.end_hour;
     j["watch_recursive"] = conf.watch_recursive;
