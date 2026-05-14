@@ -19,12 +19,11 @@ class Processor {
         std::unique_ptr<Logger> logger;
         std::unique_ptr<Watcher> watcher;
         std::unique_ptr<Hasher> hasher;
-        std::unordered_map<std::string, std::vector<std::string>> allin;
         int argc;
         char** argv;
     public:
-        void parseArgs();
-        void uploadAllin();
+        void prepareConfig();
+	void parseArgs();
         void initLogger();
         void initConfig();
         void initWatcher();

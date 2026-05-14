@@ -5,8 +5,8 @@
 #include <xxhash.h>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
-#include "daemon.hpp"
-#include "logger.hpp"
+
+#include "hasher.hpp"
 
 using json = nlohmann::ordered_json;
 
@@ -49,7 +49,8 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
     if (!moved) {
         MoveEvent tempEvent; //
         tempEvent.old_path = path;
-        tempEvent.hash = calcHash(path);
+	if (std::filesystem::exists(path))
+            tempEvent.hash = calcHash(path);
         move_buffer[cookie] = tempEvent;
     } else {
         auto it = move_buffer.find(cookie);
@@ -58,7 +59,7 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
             uint64_t old_hash = it->second.hash;
             uint64_t new_hash = calcHash(path);
 
-            deleteHash(path, logger);
+            deleteHash(old_path, logger);
             updateHash(path, new_hash);
             logger.log(LOG_INFO, "Moved:" + old_path + " > " + path);
             move_buffer.erase(it);
@@ -100,7 +101,7 @@ uint64_t Hasher::calcHash(const std::string& path) {
 }
 
 void Hasher::loadBaselineFile(const std::string& path) {
-    baseline = loadBaseline(path);
+    loadBaseline(path);
     table = baseline;
 }
 
@@ -120,7 +121,7 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         if (!std::filesystem::is_regular_file(entry.path())) return;
-        if (shouldIgnoreDir(entry.path(), ignore_paths)) return;
+        if (shouldIgnoreDir(entry.path())) return;
         std::string wfile = entry.path().string();
         table[wfile] = calcHash(wfile);
     } catch (std::filesystem::filesystem_error& e) {
@@ -137,30 +138,30 @@ void Hasher::calcDirHashes(const std::string& current_path) {
         throw std::runtime_error("Path isn't directory: " + current_path);
     if (recursive) {
         for (const auto& file : std::filesystem::recursive_directory_iterator(current_path)) {
-            processFileEntry(table, file, ignore_paths);
+            processFileEntry(file);
         }
     } else {
         for (const auto& file : std::filesystem::directory_iterator(current_path)) {
-            processFileEntry(table, file, ignore_paths);
+            processFileEntry(file);
         }
     }
 }
 
 void Hasher::loadBaseline(const std::string& path) {
-    std::ifstream baseline(path);
-    if (!baseline.is_open())
+    std::ifstream file(path);
+    if (!file.is_open())
         throw std::runtime_error("The baseline.json wasn't opened");
     json j;
-    baseline >> j;
-    table.clear();
+    file >> j;
+    baseline.clear();
     for (const auto& pair : j.items()) {
-        table[pair.key()] = pair.value().get<uint64_t>();
+        baseline[pair.key()] = pair.value().get<uint64_t>();
     }
 }
 
-void Hasher::initHashes(const Config& conf, const std::string& path) {
-    calcDirHashes(path);
-    std::ofstream baseline("baseline.json");
+void Hasher::initHashes(const Config& conf, const std::string& watch_path, const std::string& baseline_path) {
+    calcDirHashes(watch_path);
+    std::ofstream baseline(baseline_path);
     if (!baseline.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
     }
