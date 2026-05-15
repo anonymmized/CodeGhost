@@ -102,11 +102,11 @@ void Processor::handleEvent(inotify_event* event) {
     if (event->mask & IN_MOVED_TO) {
         hasher->fileMoved(full_path, *logger, true, event->cookie);
     }
-    /*
-    if (event->mask & IN_DELETE) {
+    if (event->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) {
+        std::string removed = watcher->getFullPath(event->wd, "");
         watcher->removeWatcher(event->wd);
+        logger->log(LOG_WARN, "Watcher removed: " + removed);
     }
-    */
     return;
 }
 
