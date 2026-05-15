@@ -55,23 +55,25 @@ void Processor::initConfig() {
 }
 
 void Processor::validateWatchPaths() {
+    std::vector<std::string> valid_paths;
     for (const auto& path : config.watch_paths) {
         if (!std::filesystem::exists(path)) {
             logger->log(LOG_ERROR, "Watch path doesn't exist: " + path);
-            throw std::runtime_error("Invalid watch path");
+            continue;
         }
-
         if (!std::filesystem::is_directory(path)) {
             logger->log(LOG_ERROR, "Watch path is not a directory: " + path);
-            throw std::runtime_error("Not a directory");
+            continue;
         }
         try {
             std::filesystem::directory_iterator it(path);
         } catch (const std::filesystem::filesystem_error& e) {
             logger->log(LOG_ERROR, "No access to watch path: " + path + " : " + e.what());
-            throw std::runtime_error("Failed to access watch path");
+            continue;
         }
+        valid_paths.push_back(path);
     }
+    config.watch_paths = std::move(valid_paths);
 }
 
 void Processor::initWatcher() { watcher = std::make_unique<Watcher>(config); }
@@ -120,10 +122,10 @@ void Processor::run(int _argc, char** _argv) {
     prepareConfig();
     // create config with errors handling
     initConfig();
-    try {
-        validateWatchPaths();
-    } catch (const std::exception& e) {
-        logger->log(LOG_ERROR, e.what());
+    validateWatchPaths();
+    if (config.watch_paths.empty()) {
+        logger->log(LOG_ERROR, "No valid watch paths left");
+        return;
     }
     // create watcher by config
     initWatcher();
@@ -141,10 +143,10 @@ void Processor::run(int _argc, char** _argv) {
             watcher->registerRecursive(path);
         }
     } else {
-	for (const auto& path : config.watch_paths) {
+	    for (const auto& path : config.watch_paths) {
             if (!shouldIgnoreTree(path, config.ignore_paths))
             	watcher->addWatch(path);
-	}
+	    }
     }
     char buffer[4096];
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
