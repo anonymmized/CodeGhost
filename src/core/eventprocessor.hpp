@@ -29,5 +29,6 @@ class Processor {
         void initWatcher();
         void initHasher();
         void handleEvent(inotify_event* event);
+        void validateWatchPaths();
         void run(int _argc, char** _argv);
 };

@@ -9,7 +9,7 @@
 #include "../utils/utils.hpp"
 
 void Watcher::addWatch(const std::string& path) {
-    int wd = inotify_add_watch(main_fd, path.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB);
+    int wd = inotify_add_watch(main_fd, path.c_str(), IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB | IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED);
     if (wd < 0)
         throw std::runtime_error("Failed to add watch for path: " + path);
     watch_table[wd] = path;
