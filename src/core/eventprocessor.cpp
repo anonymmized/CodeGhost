@@ -42,8 +42,8 @@ void Processor::prepareConfig() {
 void Processor::parseArgs() { args = CliParser::parse(argc, argv); }
 void Processor::initLogger() {
     std::filesystem::path ppath(args.logPath);
-	std::filesystem::path parent = ppath.parent_path();
-	std::filesystem::create_directories(parent);
+    std::filesystem::path parent = ppath.parent_path();
+    std::filesystem::create_directories(parent);
     logger = std::make_unique<Logger>(args.logPath, LOG_INFO, LOG_INFO, true, true);
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
@@ -132,21 +132,22 @@ void Processor::run(int _argc, char** _argv) {
     // create hasher by config's vars
     initHasher();
     if (!std::filesystem::exists(DEFAULT_BASELINE_PATH)) {
-    	std::filesystem::create_directories(std::filesystem::path(DEFAULT_BASELINE_PATH).parent_path());
-	for (const auto& path : config.watch_paths) {
-	    hasher->initHashes(config, path, std::string(DEFAULT_BASELINE_PATH));
-	}
-    } else hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
-    logger->log(LOG_INFO, "Hashes were calculated.");
+        std::filesystem::create_directories(std::filesystem::path(DEFAULT_BASELINE_PATH).parent_path());
+        hasher->initHashes(config);
+        hasher->saveBaseline(std::string(DEFAULT_BASELINE_PATH));
+        logger->log(LOG_INFO, "Baseline created: " + std::string(DEFAULT_BASELINE_PATH));
+    } else
+        hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
+    logger->log(LOG_INFO, "Baseline initialized.");
     if (config.watch_recursive) {
         for (const auto& path : config.watch_paths) {
             watcher->registerRecursive(path);
         }
     } else {
-	    for (const auto& path : config.watch_paths) {
+        for (const auto& path : config.watch_paths) {
             if (!shouldIgnoreTree(path, config.ignore_paths))
-            	watcher->addWatch(path);
-	    }
+                watcher->addWatch(path);
+        }
     }
     char buffer[4096];
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);

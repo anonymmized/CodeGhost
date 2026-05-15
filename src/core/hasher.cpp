@@ -105,6 +105,11 @@ void Hasher::loadBaselineFile(const std::string& path) {
     table = baseline;
 }
 
+void Hasher::syncBaseline(const std::string& path) {
+    baseline = table;
+    saveBaseline(path);
+}
+
 bool Hasher::compareHashes(const uint64_t& old_hash, const std::string& path) {
     return calcHash(path) == old_hash;
 }
@@ -159,18 +164,23 @@ void Hasher::loadBaseline(const std::string& path) {
     }
 }
 
-void Hasher::initHashes(const Config& conf, const std::string& watch_path, const std::string& baseline_path) {
-    calcDirHashes(watch_path);
-    std::ofstream baseline(baseline_path);
-    if (!baseline.is_open()) {
+void Hasher::saveBaseline(const std::string& baseline_path) {
+    std::ofstream baselinef(baseline_path);
+    if (!baselinef.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
     }
     json j;
     for (const auto& pair : table) {
         j[pair.first] = pair.second;
     }
-    baseline << j.dump(4);
-    baseline.close();
+    baselinef << j.dump(4);
+    baselinef.close();
+}
+
+void Hasher::initHashes(const Config& conf) {
+    table.clear();
+    for (const auto& path : conf.watch_paths)
+        calcDirHashes(path);
 }
 
 void Hasher::deleteHash(const std::string& path, Logger& logger) {
