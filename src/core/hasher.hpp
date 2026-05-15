@@ -31,7 +31,9 @@ class Hasher {
         void processFileEntry(const std::filesystem::directory_entry& entry); // helper method for code readability
         void calcDirHashes(const std::string& current_path); // recursive or not calculation of all files in target directory
         void loadBaseline(const std::string& path); // load all paths:hashes pairs to hashtable
-        void initHashes(const Config& conf, const std::string& watch_path, const std::string& baseline_path); // upload new changes to baseline.json
+        void initHashes(const Config& conf); // upload new changes to baseline.json
+        void saveBaseline(const std::string& baseline_path);
+        void syncBaseline(const std::string& path);
         void deleteHash(const std::string& path, Logger& logger); // handle file deletion
         void fileChanged(const std::string& path, Logger& logger); // handle file editing or creating
         void fileMoved(const std::string& path, Logger& logger, bool moved, uint32_t& cookie); // handle IN_MOVED_FROM and IN_MOVED_TO
