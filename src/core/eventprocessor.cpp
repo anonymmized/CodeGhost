@@ -41,11 +41,9 @@ void Processor::prepareConfig() {
 
 void Processor::parseArgs() { args = CliParser::parse(argc, argv); }
 void Processor::initLogger() {
-    if (args.logPath == DEFAULT_LOG_PATH) {
-    	std::filesystem::path ppath(args.logPath);
+    std::filesystem::path ppath(args.logPath);
 	std::filesystem::path parent = ppath.parent_path();
 	std::filesystem::create_directories(parent);
-    }	
     logger = std::make_unique<Logger>(args.logPath, LOG_INFO, LOG_INFO, true, true);
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
@@ -54,6 +52,26 @@ void Processor::initConfig() {
     config = loadFromConfig(args.configPath);
     logger->log(LOG_INFO, "Config loaded: " + args.configPath);
     logger->log(LOG_INFO, "Recursive mode: " + std::to_string(config.watch_recursive));
+}
+
+void Processor::validateWatchPaths() {
+    for (const auto& path : config.watch_paths) {
+        if (!std::filesystem::exists(path)) {
+            logger->log(LOG_ERROR, "Watch path doesn't exist: " + path);
+            throw std::runtime_error("Invalid watch path");
+        }
+
+        if (!std::filesystem::is_directory(path)) {
+            logger->log(LOG_ERROR, "Watch path is not a directory: " + path);
+            throw std::runtime_error("Not a directory");
+        }
+        try {
+            std::filesystem::directory_iterator it(path);
+        } catch (const std::filesystem::filesystem_error& e) {
+            logger->log(LOG_ERROR, "No access to watch path: " + path + " : " + e.what());
+            throw std::runtime_error("Failed to access watch path");
+        }
+    }
 }
 
 void Processor::initWatcher() { watcher = std::make_unique<Watcher>(config); }
@@ -102,6 +120,11 @@ void Processor::run(int _argc, char** _argv) {
     prepareConfig();
     // create config with errors handling
     initConfig();
+    try {
+        validateWatchPaths();
+    } catch (const std::exception& e) {
+        logger->log(LOG_ERROR, e.what());
+    }
     // create watcher by config
     initWatcher();
     // create hasher by config's vars
