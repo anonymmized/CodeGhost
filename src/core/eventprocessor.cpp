@@ -118,8 +118,12 @@ void Processor::handleEvent(inotify_event* event) {
 void handleSig(int) { running.store(false); }
 
 void Processor::run(int _argc, char** _argv) {
-    std::signal(SIGINT, handleSig);
-    std::signal(SIGTERM, handleSig);
+    struct sigaction sa{};
+    sa.sa_handler = handleSig;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
     argc = _argc;
     argv = _argv;
     parseArgs();
