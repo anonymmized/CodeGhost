@@ -23,7 +23,7 @@ class Processor {
         char** argv;
     public:
         void prepareConfig();
-	void parseArgs();
+        void parseArgs();
         void initLogger();
         void initConfig();
         void initWatcher();
@@ -32,3 +32,5 @@ class Processor {
         void validateWatchPaths();
         void run(int _argc, char** _argv);
 };
+
+void handleSig(int);
