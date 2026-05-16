@@ -12,6 +12,10 @@
 #include <unordered_map>
 #include <sys/inotify.h>
 #include <iostream>
+#include <atomic>
+#include <csignal>
+
+inline std::atomic<bool> running(true);
 
 void Processor::prepareConfig() {
     std::error_code ec;
@@ -110,7 +114,11 @@ void Processor::handleEvent(inotify_event* event) {
     return;
 }
 
+void handleSig(int) { running.store(false); }
+
 void Processor::run(int _argc, char** _argv) {
+    std::signal(SIGINT, handleSig);
+    std::signal(SIGTERM, handleSig);
     argc = _argc;
     argv = _argv;
     parseArgs();
@@ -151,8 +159,12 @@ void Processor::run(int _argc, char** _argv) {
     }
     char buffer[4096];
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
-    while (true) {
+    while (running.load()) {
         int len = read(watcher->getFd(), buffer, sizeof(buffer));
+        if (len <= 0) {
+            if (!running.load()) break;
+            continue;
+        }
         int i = 0;
         while (i < len) {
             auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
@@ -160,4 +172,5 @@ void Processor::run(int _argc, char** _argv) {
             i += sizeof(inotify_event) + event->len;
         }
     }
+    logger->log(LOG_INFO, "Daemon stopped");
 }
