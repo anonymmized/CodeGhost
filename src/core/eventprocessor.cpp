@@ -14,6 +14,7 @@
 #include <iostream>
 #include <atomic>
 #include <csignal>
+#include <cerrno>
 
 inline std::atomic<bool> running(true);
 
@@ -161,10 +162,17 @@ void Processor::run(int _argc, char** _argv) {
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
     while (running.load()) {
         int len = read(watcher->getFd(), buffer, sizeof(buffer));
-        if (len <= 0) {
-            if (!running.load()) break;
-            continue;
+        if (len < 0) {
+            if (errno == EINTR) {
+                if (!running.load()) {
+                    break;
+                }
+                continue;
+            }
+            logger->log(LOG_ERROR, "read() failed");
+            break;
         }
+        if (len == 0) continue;
         int i = 0;
         while (i < len) {
             auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
