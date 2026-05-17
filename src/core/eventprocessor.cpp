@@ -84,35 +84,45 @@ void Processor::validateWatchPaths() {
 void Processor::initWatcher() { watcher = std::make_unique<Watcher>(config); }
 void Processor::initHasher() { hasher = std::make_unique<Hasher>(config.ignore_paths, config.watch_recursive); }
 
-void Processor::handleEvent(inotify_event* event) {
-    if (!watcher->hasWatch(event->wd)) {
-        return;
-    }
+void Processor::collectEvent(inotify_event* event) {
+    if (!watcher->hasWatch(event->wd)) return;
+
     std::string name = event->len ? event->name : "";
     std::string full_path = watcher->getFullPath(event->wd, name);
-    if (event->mask & IN_CREATE) {
-        if (std::filesystem::exists(full_path) && std::filesystem::is_directory(full_path))
-            watcher->registerRecursive(full_path);
-        hasher->fileChanged(full_path, *logger);
+    if (event->mask & IN_CREATE)
+        pending_events.push_back({full_path, EventType::Create, event->cookie});
+    if (event->mask & IN_MODIFY)
+        pending_events.push_back({full_path, EventType::Modify, event->cookie});
+    if (event->mask & IN_DELETE)
+        pending_events.push_back({full_path, EventType::Delete, event->cookie});
+    if (event->mask & IN_MOVED_FROM)
+        pending_events.push_back({full_path, EventType::MoveFrom, event->cookie});
+    if (event->mask & IN_MOVED_TO)
+        pending_events.push_back({full_path, EventType::MoveTo, event->cookie});
+}
+
+void Processor::processPendingEvents() {
+    std::unordered_map<std::string, EventType> latest;
+    for (const auto& evnt : pending_events) {
+        latest[evnt.path] = evnt.type;
     }
-    if (event->mask & IN_MODIFY) {
-        hasher->fileChanged(full_path, *logger);
+
+    for (const auto& [path, type] : latest) {
+        switch (type) {
+            case EventType::Modify:
+                hasher->fileChanged(path, *logger);
+                break;
+            case EventType::Delete:
+                hasher->deleteHash(path, *logger);
+                break;
+            case EventType::Create:
+                if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
+                    watcher->registerRecursive(path);
+                }
+                hasher->fileChanged(path, *logger);
+        }
     }
-    if (event->mask & IN_DELETE) {
-        hasher->deleteHash(full_path, *logger);
-    }
-    if (event->mask & IN_MOVED_FROM) {
-        hasher->fileMoved(full_path, *logger, false, event->cookie);
-    }
-    if (event->mask & IN_MOVED_TO) {
-        hasher->fileMoved(full_path, *logger, true, event->cookie);
-    }
-    if (event->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) {
-        std::string removed = watcher->getFullPath(event->wd, "");
-        watcher->removeWatcher(event->wd);
-        logger->log(LOG_WARN, "Watcher removed: " + removed);
-    }
-    return;
+    pending_events.clear();
 }
 
 void handleSig(int) { running.store(false); }
@@ -180,9 +190,10 @@ void Processor::run(int _argc, char** _argv) {
         int i = 0;
         while (i < len) {
             auto* event = reinterpret_cast<inotify_event*>(&buffer[i]);
-            handleEvent(event);
+            collectEvent(event);
             i += sizeof(inotify_event) + event->len;
         }
+        processPendingEvents();
     }
     logger->log(LOG_INFO, "Daemon stopped");
 }

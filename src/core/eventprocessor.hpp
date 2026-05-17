@@ -12,6 +12,20 @@
 #include <sys/inotify.h>
 #include <filesystem>
 
+enum class EventType {
+    Create,
+    Modify,
+    Delete,
+    MoveFrom,
+    MoveTo
+};
+
+struct FsEvent {
+    std::string path;
+    EventType type;
+    uint32_t cookie;
+};
+
 class Processor {
     private:
         Config config;
@@ -19,6 +33,7 @@ class Processor {
         std::unique_ptr<Logger> logger;
         std::unique_ptr<Watcher> watcher;
         std::unique_ptr<Hasher> hasher;
+        std::vector<FsEvent> pending_events;
         int argc;
         char** argv;
     public:
@@ -30,6 +45,7 @@ class Processor {
         void initHasher();
         void handleEvent(inotify_event* event);
         void validateWatchPaths();
+        void collectEvent(inotify_event* event);
         void run(int _argc, char** _argv);
 };
 
