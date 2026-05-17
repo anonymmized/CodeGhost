@@ -43,8 +43,8 @@ class Processor {
         void initConfig();
         void initWatcher();
         void initHasher();
-        void handleEvent(inotify_event* event);
         void validateWatchPaths();
+        void processPendingEvents();
         void collectEvent(inotify_event* event);
         void run(int _argc, char** _argv);
 };
