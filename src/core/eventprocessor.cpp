@@ -83,7 +83,7 @@ void Processor::validateWatchPaths() {
 }
 
 void Processor::initWatcher() { watcher = std::make_unique<Watcher>(config); }
-void Processor::initHasher() { hasher = std::make_unique<Hasher>(config.ignore_paths, config.watch_recursive); }
+void Processor::initHasher() { hasher = std::make_unique<Hasher>(config.ignore_paths, config.critical_paths, config.watch_recursive); }
 
 void Processor::collectEvent(inotify_event* event) {
     if (!watcher->hasWatch(event->wd)) return;

@@ -34,6 +34,19 @@ void Hasher::fileAttributed(const std::string& path, Logger& logger) {
 }
 */
 
+bool Hasher::isCriticalPath(const std::filesystem::path& path) {
+    std::string current = path.string();
+    for (const auto& critical : critical_paths) {
+        if (current.starts_with(critical)) return true;
+    }
+    return false;
+}
+
+LogLevel Hasher::levelForPath(const std::filesystem::path& path, LogLevel critical_level) {
+    if (isCriticalPath(path)) return critical_level;
+    return LOG_INFO;
+}
+
 void Hasher::updateHash(const std::string& path, const uint64_t new_hash) {
     auto it = table.find(path);
     if (it != table.end()) {
@@ -61,7 +74,9 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
 
             deleteHash(old_path, logger);
             updateHash(path, new_hash);
-            logger.log(LOG_INFO, "Moved:" + old_path + " > " + path);
+            LogLevel level = LOG_INFO;
+            if (isCriticalPath(old_path) || isCriticalPath(path)) level = LOG_WARN;
+            logger.log(level, "Moved:" + old_path + " > " + path);
             move_buffer.erase(it);
         } else {
             fileChanged(path, logger);
@@ -76,10 +91,12 @@ void Hasher::fileChanged(const std::string& path, Logger& logger) {
     auto it = baseline.find(path);
     if (it == baseline.end()) {
         table[path] = new_hash;
-        logger.log(LOG_INFO, "Created: " + path);
+        LogLevel level = levelForPath(path, LOG_WARN);
+        logger.log(level, "Created: " + path);
     } else if (it->second != new_hash) {
         table[path] = new_hash;
-        logger.log(LOG_INFO, "Modified: " + path);
+        LogLevel level = levelForPath(path, LOG_WARN);
+        logger.log(level, "Modified: " + path);
     }
 }
 
@@ -187,6 +204,7 @@ void Hasher::deleteHash(const std::string& path, Logger& logger) {
     auto it = table.find(path);
     if (it != table.end()) {
         table.erase(it);
-        logger.log(LOG_INFO, "Deleted: " + path);
+        LogLevel level = levelForPath(path, LOG_ERROR);
+        logger.log(level, "Deleted: " + path);
     }
 }

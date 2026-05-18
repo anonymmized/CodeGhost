@@ -19,12 +19,15 @@ class Hasher {
         std::unordered_map<std::string, uint64_t> table;
         std::unordered_map<std::string, uint64_t> baseline;
         std::vector<std::string> ignore_paths;
+        std::vector<std::string> critical_paths;
         std::unordered_map<uint32_t, MoveEvent> move_buffer;
         bool recursive = true;
     public:
         Hasher(const std::vector<std::string>& _ignore_paths,
-               bool _recursive) : ignore_paths(_ignore_paths), recursive(_recursive) {}
+               const std::vector<std::string>& _critical_paths,
+               bool _recursive) : ignore_paths(_ignore_paths), critical_paths(_critical_paths), recursive(_recursive) {}
         uint64_t calcHash(const std::string& path); // calculate file's hash on 'path'
+        bool isCriticalPath(const std::filesystem::path& path);
         void loadBaselineFile(const std::string& path); // load baseline in table in start
         bool compareHashes(const uint64_t& old_hash, const std::string& path); // compare two hashes
         bool shouldIgnoreDir(const std::filesystem::path& path); // check if dir need to be ignored
@@ -34,6 +37,7 @@ class Hasher {
         void initHashes(const Config& conf); // upload new changes to baseline.json
         void saveBaseline(const std::string& baseline_path);
         void syncBaseline(const std::string& path);
+        LogLevel levelForPath(const std::filesystem::path& path, LogLevel critical_level);
         void deleteHash(const std::string& path, Logger& logger); // handle file deletion
         void fileChanged(const std::string& path, Logger& logger); // handle file editing or creating
         void fileMoved(const std::string& path, Logger& logger, bool moved, uint32_t& cookie); // handle IN_MOVED_FROM and IN_MOVED_TO
