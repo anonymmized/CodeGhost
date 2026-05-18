@@ -15,6 +15,7 @@
 #include <atomic>
 #include <csignal>
 #include <cerrno>
+#include <poll.h>
 
 inline std::atomic<bool> running(true);
 
@@ -89,16 +90,17 @@ void Processor::collectEvent(inotify_event* event) {
 
     std::string name = event->len ? event->name : "";
     std::string full_path = watcher->getFullPath(event->wd, name);
+    auto now = std::chrono::steady_clock::now();
     if (event->mask & IN_CREATE)
-        pending_events[full_path].push_back({EventType::Create, event->cookie});
+        pending_events[full_path].push_back({EventType::Create, event->cookie, now});
     if (event->mask & IN_MODIFY)
-        pending_events[full_path].push_back({EventType::Modify, event->cookie});
+        pending_events[full_path].push_back({EventType::Modify, event->cookie, now});
     if (event->mask & IN_DELETE)
-        pending_events[full_path].push_back({EventType::Delete, event->cookie});
+        pending_events[full_path].push_back({EventType::Delete, event->cookie, now});
     if (event->mask & IN_MOVED_FROM)
-        pending_events[full_path].push_back({EventType::MoveFrom, event->cookie});
+        pending_events[full_path].push_back({EventType::MoveFrom, event->cookie, now});
     if (event->mask & IN_MOVED_TO)
-        pending_events[full_path].push_back({EventType::MoveTo, event->cookie});
+        pending_events[full_path].push_back({EventType::MoveTo, event->cookie, now});
 }
 
 EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
@@ -106,8 +108,8 @@ EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
     bool has_modify = false;
     bool has_delete = false;
 
-    for (const auto& evnt : events) {
-        switch (evnt.type) {
+    for (const auto& event : events) {
+        switch (event.type) {
             case EventType::Create:
                 has_create = true;
                 break;
@@ -128,8 +130,20 @@ EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
 }
 
 void Processor::processPendingEvents() {
-    for (const auto& [path, events] : pending_events) {
-        EventType type = normilizeEvents(events);
+    auto now = std::chrono::steady_clock::now();
+    for (auto it = pending_events.begin(); it != pending_events.end(); ) {
+        const std::string& path = it->first;
+        const std::vector<FsEvent>& events = it->second;
+        if (events.empty()) {
+            it = pending_events.erase(it);
+            continue;
+        }
+        const auto& last_event = events.back();
+        if (now - last_event.timestamp < EVENT_DEBOUNCE) {
+            ++it;
+            continue;
+        }
+        EventType type = normalizeEvents(events);
         switch (type) {
             case EventType::Modify:
                 hasher->fileChanged(path, *logger);
@@ -146,8 +160,8 @@ void Processor::processPendingEvents() {
             default:
                 break;
         }
+        it = pending_events.erase(it);
     }
-    pending_events.clear();
 }
 
 void handleSig(int) { running.store(false); }
@@ -200,6 +214,23 @@ void Processor::run(int _argc, char** _argv) {
     char buffer[4096];
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
     while (running.load()) {
+        pollfd pfd{watcher->getFd(), POLLIN, 0};
+        int ready = poll(&pfd, 1, 50);
+        if (ready < 0) {
+            if (errno == EINTR) {
+                if (!running.load()) {
+                    break;
+                }
+                continue;
+            }
+            logger->log(LOG_ERROR, "poll() failed");
+            break;
+        }
+        if (ready == 0) {
+            processPendingEvents();
+            continue;
+        }
+
         int len = read(watcher->getFd(), buffer, sizeof(buffer));
         if (len < 0) {
             if (errno == EINTR) {
