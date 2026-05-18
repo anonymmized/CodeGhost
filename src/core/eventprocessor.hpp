@@ -21,10 +21,10 @@ enum class EventType {
 };
 
 struct FsEvent {
-    std::string path;
     EventType type;
     uint32_t cookie;
 };
+
 
 class Processor {
     private:
@@ -33,7 +33,7 @@ class Processor {
         std::unique_ptr<Logger> logger;
         std::unique_ptr<Watcher> watcher;
         std::unique_ptr<Hasher> hasher;
-        std::vector<FsEvent> pending_events;
+        std::unordered_map<std::string, std::vector<FsEvent>> pending_events;
         int argc;
         char** argv;
     public:
@@ -44,6 +44,7 @@ class Processor {
         void initWatcher();
         void initHasher();
         void validateWatchPaths();
+        EventType normalizeEvents(const std::vector<FsEvent>& events);
         void processPendingEvents();
         void collectEvent(inotify_event* event);
         void run(int _argc, char** _argv);

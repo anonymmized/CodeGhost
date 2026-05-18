@@ -90,24 +90,46 @@ void Processor::collectEvent(inotify_event* event) {
     std::string name = event->len ? event->name : "";
     std::string full_path = watcher->getFullPath(event->wd, name);
     if (event->mask & IN_CREATE)
-        pending_events.push_back({full_path, EventType::Create, event->cookie});
+        pending_events[full_path].push_back({EventType::Create, event->cookie});
     if (event->mask & IN_MODIFY)
-        pending_events.push_back({full_path, EventType::Modify, event->cookie});
+        pending_events[full_path].push_back({EventType::Modify, event->cookie});
     if (event->mask & IN_DELETE)
-        pending_events.push_back({full_path, EventType::Delete, event->cookie});
+        pending_events[full_path].push_back({EventType::Delete, event->cookie});
     if (event->mask & IN_MOVED_FROM)
-        pending_events.push_back({full_path, EventType::MoveFrom, event->cookie});
+        pending_events[full_path].push_back({EventType::MoveFrom, event->cookie});
     if (event->mask & IN_MOVED_TO)
-        pending_events.push_back({full_path, EventType::MoveTo, event->cookie});
+        pending_events[full_path].push_back({EventType::MoveTo, event->cookie});
+}
+
+EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
+    bool has_create = false;
+    bool has_modify = false;
+    bool has_delete = false;
+
+    for (const auto& evnt : events) {
+        switch (evnt.type) {
+            case EventType::Create:
+                has_create = true;
+                break;
+            case EventType::Modify:
+                has_modify = true;
+                break;
+            case EventType::Delete:
+                has_delete = true;
+                break;
+            default:
+                break;
+        }
+    }
+    if (has_delete) return EventType::Delete;
+    if (has_create) return EventType::Create;
+    if (has_modify) return EventType::Modify;
+    return events.back().type;
 }
 
 void Processor::processPendingEvents() {
-    std::unordered_map<std::string, EventType> latest;
-    for (const auto& evnt : pending_events) {
-        latest[evnt.path] = evnt.type;
-    }
-
-    for (const auto& [path, type] : latest) {
+    for (const auto& [path, events] : pending_events) {
+        EventType type = normilizeEvents(events);
         switch (type) {
             case EventType::Modify:
                 hasher->fileChanged(path, *logger);
@@ -120,6 +142,9 @@ void Processor::processPendingEvents() {
                     watcher->registerRecursive(path);
                 }
                 hasher->fileChanged(path, *logger);
+                break;
+            default:
+                break;
         }
     }
     pending_events.clear();
