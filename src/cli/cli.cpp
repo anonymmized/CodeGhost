@@ -6,7 +6,7 @@
 #include <cctype>
 #include <algorithm>
 
-#include "../core/defaults.hpp"
+#include "../core/runtime_constants.hpp"
 
 CliArgs CliParser::parse(int argc, char* argv[]) {
   CliArgs args;
@@ -28,7 +28,7 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
       const char* env = std::getenv("CONFIG_PATH_SEC_ANALYZER");
       if (env) args.configPath = env;
   }
-  if (args.logPath.empty()) args.logPath = DEFAULT_LOG_PATH;
+  if (args.logPath.empty()) args.logPath = std::string(runtime::DEFAULT_LOG_PATH);
   return args;
 }
 

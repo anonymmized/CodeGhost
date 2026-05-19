@@ -5,7 +5,8 @@
 #include <array>
 #include <fstream>
 
-#include "daemon.hpp"
+#include "./daemon.hpp"
+#include "./runtime_constants.hpp"
 
 enum LogLevel {
     LOG_INFO = 0,
@@ -21,9 +22,9 @@ inline constexpr std::array<std::string_view, 3> strLevels {
 };
 
 inline constexpr std::array<std::string_view, 3> LOG_COLORS = {
-    BLUE,
-    YELLOW,
-    RED
+    runtime::BLUE,
+    runtime::YELLOW,
+    runtime::RED
 };
 
 class Logger {
