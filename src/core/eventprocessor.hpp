@@ -36,7 +36,6 @@ class Processor {
         std::unique_ptr<Watcher> watcher;
         std::unique_ptr<Hasher> hasher;
         std::unordered_map<std::string, std::vector<FsEvent>> pending_events;
-        static constexpr auto EVENT_DEBOUNCE = std::chrono::milliseconds(200);
         int argc;
         char** argv;
     public:

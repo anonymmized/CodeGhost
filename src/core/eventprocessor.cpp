@@ -5,7 +5,7 @@
 #include "./hasher.hpp"
 #include "./watcher.hpp"
 #include "../utils/utils.hpp"
-#include "./defaults.hpp"
+#include "./runtime_constants.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -21,11 +21,11 @@ inline std::atomic<bool> running(true);
 
 void Processor::prepareConfig() {
     std::error_code ec;
-    if (args.configPath.empty()) args.configPath = std::string(DEFAULT_CONFIG_PATH);
+    if (args.configPath.empty()) args.configPath = std::string(runtime::DEFAULT_CONFIG_PATH);
     if (!std::filesystem::exists(args.configPath, ec)) {
     	logger->log(LOG_WARN, "Config doesn't exist: " + args.configPath);
-	logger->log(LOG_INFO, "Using default config: " + std::string(DEFAULT_CONFIG_PATH));
-	args.configPath = std::string(DEFAULT_CONFIG_PATH);
+	logger->log(LOG_INFO, "Using default config: " + std::string(runtime::DEFAULT_CONFIG_PATH));
+	args.configPath = std::string(runtime::DEFAULT_CONFIG_PATH);
     }
     ec.clear();
 
@@ -40,7 +40,7 @@ void Processor::prepareConfig() {
 	}
 	Config new_conf = createDefaultConfig();
 
-    	uploadToConfig(new_conf, std::string(DEFAULT_CONFIG_PATH));
+	uploadToConfig(new_conf, std::string(runtime::DEFAULT_CONFIG_PATH));
 	logger->log(LOG_INFO, "Default config created: " + args.configPath);
     }
 }
@@ -139,7 +139,7 @@ void Processor::processPendingEvents() {
             continue;
         }
         const auto& last_event = events.back();
-        if (now - last_event.timestamp < EVENT_DEBOUNCE) {
+        if (now - last_event.timestamp < runtime::EVENT_DEBOUNCE) {
             ++it;
             continue;
         }
@@ -193,13 +193,13 @@ void Processor::run(int _argc, char** _argv) {
     initWatcher();
     // create hasher by config's vars
     initHasher();
-    if (!std::filesystem::exists(DEFAULT_BASELINE_PATH)) {
-        std::filesystem::create_directories(std::filesystem::path(DEFAULT_BASELINE_PATH).parent_path());
+    if (!std::filesystem::exists(runtime::DEFAULT_BASELINE_PATH)) {
+        std::filesystem::create_directories(std::filesystem::path(runtime::DEFAULT_BASELINE_PATH).parent_path());
         hasher->initHashes(config);
-        hasher->saveBaseline(std::string(DEFAULT_BASELINE_PATH));
-        logger->log(LOG_INFO, "Baseline created: " + std::string(DEFAULT_BASELINE_PATH));
+        hasher->saveBaseline(std::string(runtime::DEFAULT_BASELINE_PATH));
+        logger->log(LOG_INFO, "Baseline created: " + std::string(runtime::DEFAULT_BASELINE_PATH));
     } else
-        hasher->loadBaselineFile(std::string(DEFAULT_BASELINE_PATH));
+        hasher->loadBaselineFile(std::string(runtime::DEFAULT_BASELINE_PATH));
     logger->log(LOG_INFO, "Baseline initialized.");
     if (config.watch_recursive) {
         for (const auto& path : config.watch_paths) {
@@ -211,11 +211,11 @@ void Processor::run(int _argc, char** _argv) {
                 watcher->addWatch(path);
         }
     }
-    char buffer[4096];
+    char buffer[runtime::INOTIFY_BUFFER_SIZE];
     for (const auto& [wd, path] : watcher->getWatchTable()) logger->log(LOG_INFO, "Watching: " + path);
     while (running.load()) {
         pollfd pfd{watcher->getFd(), POLLIN, 0};
-        int ready = poll(&pfd, 1, 50);
+        int ready = poll(&pfd, 1, runtime::POLL_TIMEOUT_MS);
         if (ready < 0) {
             if (errno == EINTR) {
                 if (!running.load()) {

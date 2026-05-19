@@ -1,5 +1,6 @@
-#include "logger.hpp"
-#include "daemon.hpp"
+#include "./logger.hpp"
+#include "./daemon.hpp"
+#include "./runtime_constants.hpp"
 
 #include <chrono>
 #include <iomanip>
@@ -52,7 +53,7 @@ void Logger::log(LogLevel level, const std::string& str) {
             std::cout << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
         std::cout << strLevels[lvl] << str;
         if (colored)
-            std::cout << CLR;
+            std::cout << runtime::CLR;
         std::cout << '\n';
     }
 }
