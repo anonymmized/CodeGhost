@@ -31,12 +31,26 @@ bool Watcher::hasWatch(int wd) {
 }
 
 void Watcher::registerRecursive(const std::string& fpath) {
-    if (shouldIgnoreTree(fpath, config.ignore_paths)) return;
-    addWatch(fpath);
-    for (const auto& path : std::filesystem::recursive_directory_iterator(fpath)) {
-        if (!std::filesystem::is_directory(path)) continue;
-        if (shouldIgnoreTree(path, config.ignore_paths)) continue;
-        addWatch(path.path().string());
+    try {
+        if (shouldIgnoreTree(fpath, config.ignore_paths)) return;
+        addWatch(fpath);
+
+        std::filesystem::recursive_directory_iterator it(fpath, std::filesystem::directory_options::skip_permission_denied);
+
+        for (const auto& entry : it) {
+            std::error_code ec;
+
+            if (!entry.is_directory(ec) || ec) continue;
+            if (shouldIgnoreTree(entry.path(), config.ignore_paths)) continue;
+
+            try {
+                addWatch(entry.path().string());
+            } catch (const std::exception&) {
+                continue;
+            }
+        }
+    } catch (const std::filesystem::filesystem_error&) {
+        return;
     }
 }
 std::string Watcher::getFullPath(int wd, const std::string& filename) {

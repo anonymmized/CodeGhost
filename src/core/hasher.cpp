@@ -85,8 +85,18 @@ void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint
 }
 
 void Hasher::fileChanged(const std::string& path, Logger& logger) {
-    if (!std::filesystem::exists(path)) return;
-    uint64_t new_hash = calcHash(path);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) return;
+    if (!std::filesystem::is_regular_file(path, ec) || ec) return;
+
+    uint64_t new_hash = 0;
+
+    try {
+        new_hash = calcHash(path);
+    } catch (const std::exception& e) {
+        logger.log(LOG_WARN, "Failed to hash changed file: " + path + " : " + e.what());
+        return;
+    }
 
     auto it = baseline.find(path);
     if (it == baseline.end()) {
@@ -142,11 +152,14 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
 // helper to doublecode sectors for function calcDirHashes
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
-        if (!std::filesystem::is_regular_file(entry.path())) return;
+        std::error_code ec;
+
+        if (!entry.is_regular_file(ec) || ec) return;
         if (shouldIgnoreDir(entry.path())) return;
+
         std::string wfile = entry.path().string();
         table[wfile] = calcHash(wfile);
-    } catch (std::filesystem::filesystem_error& e) {
+    } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << '\n';
     } catch (std::exception& e) {
         std::cerr << "Error processing file " << entry.path() << ": " << e.what() << '\n';
@@ -154,18 +167,27 @@ void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
 }
 
 void Hasher::calcDirHashes(const std::string& current_path) {
-    if (!std::filesystem::exists(current_path))
-        throw std::runtime_error("Path doesn't exist: " + current_path);
-    if (!std::filesystem::is_directory(current_path))
-        throw std::runtime_error("Path isn't directory: " + current_path);
-    if (recursive) {
-        for (const auto& file : std::filesystem::recursive_directory_iterator(current_path)) {
-            processFileEntry(file);
+    std::error_code ec;
+
+    if (!std::filesystem::exists(current_path, ec) || ec) return;
+    if (!std::filesystem::is_directory(current_path, ec) || ec) return;
+
+    try {
+        if (recursive) {
+            std::filesystem::recursive_directory_iterator it(current_path, std::filesystem::directory_options::skip_permission_denied);
+
+            for (const auto& file : it) {
+                processFileEntry(file);
+            }
+        } else {
+            std::filesystem::directory_iterator it(current_path, std::filesystem::directory_options::skip_permission_denied);
+
+            for (const auto& file : it) {
+                processFileEntry(file);
+            }
         }
-    } else {
-        for (const auto& file : std::filesystem::directory_iterator(current_path)) {
-            processFileEntry(file);
-        }
+    } catch (const std::filesystem::filesystem_error&) {
+        return;
     }
 }
 

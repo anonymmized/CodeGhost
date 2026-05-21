@@ -68,6 +68,10 @@ enable_testing()
 # Create executable test binary file 'codeghost_tests'
 add_executable(codeghost_tests
     tests/integration/filesystem_monitoring_test.cpp
+    tests/integration/watcher_delete_test.cpp
+    tests/integration/watcher_modify_test.cpp
+    tests/integration/watcher_recursive_test.cpp
+    tests/integration/watcher_ignore_paths_test.cpp
 )
 
 # Links tets binary files with 'codeghost_core' and GTest::gtest_main. PRIVATE flag means that dependencies are not allowd to export further
