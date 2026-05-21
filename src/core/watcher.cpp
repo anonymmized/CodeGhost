@@ -35,7 +35,7 @@ void Watcher::registerRecursive(const std::string& fpath) {
         if (shouldIgnoreTree(fpath, config.ignore_paths)) return;
         addWatch(fpath);
 
-        std::filesystem::recursive_directory_iterator it(fpath, std::filesystem::directory_options::skip_permissions_denied);
+        std::filesystem::recursive_directory_iterator it(fpath, std::filesystem::directory_options::skip_permission_denied);
 
         for (const auto& entry : it) {
             std::error_code ec;

@@ -126,14 +126,17 @@ EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
     if (has_delete) return EventType::Delete;
     if (has_create) return EventType::Create;
     if (has_modify) return EventType::Modify;
+
     return events.back().type;
 }
 
 void Processor::processPendingEvents() {
     auto now = std::chrono::steady_clock::now();
+
     for (auto it = pending_events.begin(); it != pending_events.end(); ) {
         const std::string& path = it->first;
         const std::vector<FsEvent>& events = it->second;
+
         if (events.empty()) {
             it = pending_events.erase(it);
             continue;
@@ -146,20 +149,43 @@ void Processor::processPendingEvents() {
         EventType type = normalizeEvents(events);
         switch (type) {
             case EventType::Modify:
-                hasher->fileChanged(path, *logger);
+                try {
+                    hasher->fileChanged(path, *logger);
+                } catch (const std::exception& e) {
+                    logger->log(LOG_WARN, "Failed to process modified path: " + path + " : " + e.what());
+                }
                 break;
             case EventType::Delete:
-                hasher->deleteHash(path, *logger);
-                break;
-            case EventType::Create:
-                if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
-                    watcher->registerRecursive(path);
+                try {
+                    hasher->deleteHash(path, *logger);
+                } catch (const std::exception& e) {
+                    logger->log(LOG_WARN, "Failed to process deleted path: " + path + " : " + e.what());
                 }
-                hasher->fileChanged(path, *logger);
                 break;
+            case EventType::Create: {
+                std::error_code ec;
+                bool exists = std::filesystem::exists(path, ec);
+                bool is_dir = exists && std::filesystem::is_directory(path, ec);
+
+                if (!ec && is_dir) {
+                    try {
+                        watcher->registerRecursive(path);
+                    } catch (const std::exception& e) {
+                        logger->log(LOG_WARN, "Failed to register new directory watch: " + path + " : " + e.what());
+                    }
+                }
+
+                try {
+                    hasher->fileChanged(path, *logger);
+                } catch (const std::exception& e) {
+                    logger->log(LOG_WARN, "Failed to process created path: " + path + " : " + e.what());
+                }
+                break;
+            }
             default:
                 break;
         }
+
         it = pending_events.erase(it);
     }
 }
