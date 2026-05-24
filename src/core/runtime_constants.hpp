@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
-#include <sys/inotify.h>
+#include "./inotify_compat.hpp"
 
 namespace runtime {
     inline constexpr std::string_view DEFAULT_CONFIG_PATH = "/etc/codeghost/config.json";

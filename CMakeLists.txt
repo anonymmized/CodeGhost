@@ -18,11 +18,16 @@ include(FetchContent)
 
 # Finds system threads library. If not found -> Error
 find_package(Threads REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
+find_path(XXHASH_INCLUDE_DIR xxhash.h REQUIRED)
+find_library(XXHASH_LIBRARY xxhash REQUIRED)
 
 # Announces external resource (googletest) with URL archive. Just announce not download
 FetchContent_Declare(
     googletest
     URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP true
 )
 
 # Downloads and make available announced googletest
@@ -43,13 +48,15 @@ add_library(codeghost_core
 target_include_directories(codeghost_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${XXHASH_INCLUDE_DIR}
 )
 
 # Link 'codeghost_core' with Threads::Threads and xxhash libraries
 target_link_libraries(codeghost_core
     PUBLIC
         Threads::Threads
-        xxhash
+        ${XXHASH_LIBRARY}
+        nlohmann_json::nlohmann_json
 )
 
 # Create executable file codeghost from main.cpp
@@ -67,6 +74,8 @@ enable_testing()
 
 # Create executable test binary file 'codeghost_tests'
 add_executable(codeghost_tests
+    tests/integration/hasher_metadata_test.cpp
+    tests/integration/hasher_move_tree_test.cpp
     tests/integration/filesystem_monitoring_test.cpp
     tests/integration/watcher_delete_test.cpp
     tests/integration/watcher_modify_test.cpp

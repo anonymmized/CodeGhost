@@ -1,0 +1,5 @@
+if(EXISTS "/Users/insany/Documents/osnova/proga/cpp/CodeGhost/build/codeghost_tests[1]_tests.cmake")
+  include("/Users/insany/Documents/osnova/proga/cpp/CodeGhost/build/codeghost_tests[1]_tests.cmake")
+else()
+  add_test(codeghost_tests_NOT_BUILT codeghost_tests_NOT_BUILT)
+endif()
