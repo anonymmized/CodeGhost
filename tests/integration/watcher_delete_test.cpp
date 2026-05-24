@@ -5,7 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <sys/inotify.h>
+#include "core/inotify_compat.hpp"
 #include <unistd.h>
 
 namespace {
@@ -20,6 +20,9 @@ namespace {
 }
 
 TEST(WatcherIntegrationTest, ReceivesDeleteEvent) {
+#ifndef __linux__
+    GTEST_SKIP() << "inotify watcher integration tests require Linux";
+#endif
     const auto temp_dir = makeTempDir("delete");
     const auto watch_dir = temp_dir / "watch";
     const auto file_path = watch_dir / "delete-me.txt";

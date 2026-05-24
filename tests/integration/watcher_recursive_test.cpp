@@ -5,7 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <sys/inotify.h>
+#include "core/inotify_compat.hpp"
 #include <unistd.h>
 
 namespace {
@@ -20,6 +20,9 @@ namespace {
 }
 
 TEST(WatcherIntegrationTest, RecursiveWatchReceivesCreateEventInSubdirectory) {
+#ifndef __linux__
+    GTEST_SKIP() << "inotify watcher integration tests require Linux";
+#endif
     const auto temp_dir = makeTempDir("recursive");
     const auto watch_dir = temp_dir / "watch";
     const auto nested_dir = watch_dir / "nested";
@@ -55,7 +58,7 @@ TEST(WatcherIntegrationTest, RecursiveWatchReceivesCreateEventInSubdirectory) {
     while (offset < bytes_read) {
         auto* event = reinterpret_cast<inotify_event*>(buffer + offset);
 
-        if ((event->mask & IN_CREATE) && std::string(event->name) = "inside.txt") {
+        if ((event->mask & IN_CREATE) && std::string(event->name) == "inside.txt") {
             saw_create = true;
             event_name = event->name;
             break;

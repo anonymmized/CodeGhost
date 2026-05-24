@@ -1,0 +1,8 @@
+HasherIntegrationTest.MetadataChangeIsPersistedWithoutHashChange 1 0.0146314
+HasherIntegrationTest.DirectoryMoveRekeysRuntimeEntries 1 0.0121791
+FilesystemMonitoringIntegrationTest.WatcherReceivesCreateEvent 0 0
+WatcherIntegrationTest.ReceivesDeleteEvent 0 0
+WatcherIntegrationTest.ReceivesModifyEvent 0 0
+WatcherIntegrationTest.RecursiveWatchReceivesCreateEventInSubdirectory 0 0
+WatcherIntegrationTest.RecursiveWatchSkipsIgnoredDirectory 0 0
+---

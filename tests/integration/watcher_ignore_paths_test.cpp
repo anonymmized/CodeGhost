@@ -18,6 +18,9 @@ namespace {
 }
 
 TEST(WatcherIntegrationTest, RecursiveWatchSkipsIgnoredDirectory) {
+#ifndef __linux__
+    GTEST_SKIP() << "inotify watcher integration tests require Linux";
+#endif
     const auto temp_dir = makeTempDir("ignore");
     const auto watch_dir = temp_dir / "watch";
     const auto ignored_dir = watch_dir / "ignored";
@@ -41,7 +44,7 @@ TEST(WatcherIntegrationTest, RecursiveWatchSkipsIgnoredDirectory) {
 
     bool has_watch_dir = false;
     bool has_ignored_dir = false;
-    bool has_normak_dir = false;
+    bool has_normal_dir = false;
 
     for (const auto& [wd, path] : watch_table) {
         if (path == watch_dir.string()) {

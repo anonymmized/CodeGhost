@@ -1,11 +1,10 @@
 #pragma once
 
-#include <string>
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <fstream>
+#include <string>
 
-#include "./daemon.hpp"
 #include "./runtime_constants.hpp"
 
 enum LogLevel {
@@ -15,7 +14,7 @@ enum LogLevel {
     LOG_NONE
 };
 
-inline constexpr std::array<std::string_view, 3> strLevels {
+inline constexpr std::array<std::string_view, 3> strLevels{
     " [INFO] ",
     " [WARN] ",
     " [ERROR] "
@@ -28,26 +27,33 @@ inline constexpr std::array<std::string_view, 3> LOG_COLORS = {
 };
 
 class Logger {
-    private:
-        uint8_t log_level : 2;
-        uint8_t tty_level : 2;
-        uint8_t colored   : 1;
-        uint8_t timestamp : 1;
-        uint8_t reserved  : 2;
-        LogLevel level;
+private:
+    uint8_t log_level : 2;
+    uint8_t tty_level : 2;
+    uint8_t colored : 1;
+    uint8_t timestamp : 1;
+    uint8_t server_logging : 1;
+    uint8_t reserved : 1;
 
-        std::string path;
-        std::ofstream file;
-    public:
-        uint8_t getLogLevel() { return log_level; }
-        uint8_t getTtyLevel() { return tty_level; }
-        uint8_t getColored() { return colored; }
-        uint8_t getTimestamp() { return timestamp; }
-        uint8_t getReserved() { return reserved; }
-        Logger(const std::string& _path,
-                         uint8_t _log_level = LOG_INFO,
-                         uint8_t _tty_level = LOG_INFO,
-                         bool _colored = true,
-                         bool _timestamp = true);
-        void log(LogLevel level, const std::string& str);
+    std::string path;
+    std::string login_path;
+    std::ofstream file;
+
+public:
+    uint8_t getLogLevel() { return log_level; }
+    uint8_t getTtyLevel() { return tty_level; }
+    uint8_t getColored() { return colored; }
+    uint8_t getTimestamp() { return timestamp; }
+    uint8_t getServerLogging() { return server_logging; }
+    uint8_t getReserved() { return reserved; }
+
+    Logger(const std::string& _path,
+           uint8_t _log_level = LOG_INFO,
+           uint8_t _tty_level = LOG_INFO,
+           bool _colored = true,
+           bool _timestamp = true,
+           bool _server_logging = false,
+           std::string _login_path = {});
+
+    void log(LogLevel level, const std::string& str);
 };

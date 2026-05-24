@@ -5,7 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <sys/inotify.h>
+#include "core/inotify_compat.hpp"
 #include <unistd.h>
 #include <vector>
 
@@ -24,6 +24,9 @@ std::filesystem::path makeTempDir() {
 
 
 TEST(FilesystemMonitoringIntegrationTest, WatcherReceivesCreateEvent) {
+#ifndef __linux__
+    GTEST_SKIP() << "inotify watcher integration tests require Linux";
+#endif
     const auto temp_dir = makeTempDir();
     const auto watch_dir = temp_dir / "watch";
 

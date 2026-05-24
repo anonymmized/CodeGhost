@@ -1,20 +1,18 @@
 #pragma once
+
 #include <string>
-#include <vector>
-#include <unordered_map>
-#include <fstream>
 
 struct CliArgs {
-  bool daemonise = false;
-  std::string configPath;
-  std::string logPath;
-  std::string partsPath;
+    bool daemonise = false;
+    bool approveRuntime = false;
+    bool reloadRuntime = false;
+    std::string configPath;
+    std::string logPath;
+    std::string loginPath;
 };
 
 class CliParser {
 public:
-  static CliArgs parse(int argc, char* argv[]);
-  static void printUsage();
+    static CliArgs parse(int argc, char* argv[]);
+    static void printUsage();
 };
-
-

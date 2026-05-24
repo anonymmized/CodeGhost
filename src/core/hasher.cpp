@@ -1,38 +1,42 @@
+#include "hasher.hpp"
+
 #include <fstream>
 #include <iostream>
-#include <iomanip>
-#include <filesystem>
-#include <xxhash.h>
-#include <unordered_map>
-#include <nlohmann/json.hpp>
 
-#include "hasher.hpp"
+#include <nlohmann/json.hpp>
+#include <xxhash.h>
 
 using json = nlohmann::ordered_json;
 
-/*
- * [ baseline in Hasher class means a basic filenames and hashes in it ]
- * [ table is a current system state. it changes until admin accept changes and then baseline updates with table ]
- * [ ignore_paths and recursion variables are using for better code readability ]
-*/
+std::optional<FileState> Hasher::readFileState(const std::string& path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) return std::nullopt;
+    if (!std::filesystem::is_regular_file(path, ec) || ec) return std::nullopt;
 
-/* this function is used to check changed metadata parts
-void Hasher::fileAttributed(const std::string& path, Logger& logger) {
-    if (!std::filesystem::exists(path)) return;
-    uint64_t check_hash = calcHash(path);
+    FileState state;
+    state.hash = calcHash(path);
 
-    auto it = baseline.find(path);
-    if (it != baseline.end()) {
-        uint64_t old_hash = it->second;
-        if (old_hash != check_hash) {
-            table[path] = check_hash;
-            logger.log(LOG_INFO, "File's attribute and content were changed: " + path);
-        } else {
-            logger.log(LOG_INFO, "File's attribute were changed: " + path);
-        }
+    ec.clear();
+    state.size = std::filesystem::file_size(path, ec);
+    if (ec) state.size = 0;
+
+    ec.clear();
+    state.permissions = static_cast<uint32_t>(std::filesystem::status(path, ec).permissions());
+    if (ec) state.permissions = 0;
+
+    ec.clear();
+    state.write_time_ticks = std::filesystem::last_write_time(path, ec).time_since_epoch().count();
+    if (ec) state.write_time_ticks = 0;
+
+    return state;
+}
+
+void Hasher::recordFileState(const std::string& path) {
+    auto state = readFileState(path);
+    if (state.has_value()) {
+        table[path] = *state;
     }
 }
-*/
 
 bool Hasher::isCriticalPath(const std::filesystem::path& path) {
     std::string current = path.string();
@@ -43,85 +47,86 @@ bool Hasher::isCriticalPath(const std::filesystem::path& path) {
 }
 
 LogLevel Hasher::levelForPath(const std::filesystem::path& path, LogLevel critical_level) {
-    if (isCriticalPath(path)) return critical_level;
-    return LOG_INFO;
-}
-
-void Hasher::updateHash(const std::string& path, const uint64_t new_hash) {
-    auto it = table.find(path);
-    if (it != table.end()) {
-        it->second = new_hash;
-    } else {
-        table[path] = new_hash;
-    }
-}
-// 'MoveEvent' saves previous changes like IN_MOVED_TO and IN_MOVED_FROM to undrestand what is going on with file
-// 'moved' flag handles event: IN_MOVED_FROM - false | IN_MOVED_TO - true. It used to understand what action need to handle
-// 'cookie' is a unique identifier for IN_MOVED_TO and IN_MOVED_FROM pair
-void Hasher::fileMoved(const std::string& path, Logger& logger, bool moved, uint32_t& cookie) {
-    if (!moved) {
-        MoveEvent tempEvent; //
-        tempEvent.old_path = path;
-	if (std::filesystem::exists(path))
-            tempEvent.hash = calcHash(path);
-        move_buffer[cookie] = tempEvent;
-    } else {
-        auto it = move_buffer.find(cookie);
-        if (it != move_buffer.end()) {
-            std::string old_path = it->second.old_path;
-            uint64_t old_hash = it->second.hash;
-            uint64_t new_hash = calcHash(path);
-
-            deleteHash(old_path, logger);
-            updateHash(path, new_hash);
-            LogLevel level = LOG_INFO;
-            if (isCriticalPath(old_path) || isCriticalPath(path)) level = LOG_WARN;
-            logger.log(level, "Moved:" + old_path + " > " + path);
-            move_buffer.erase(it);
-        } else {
-            fileChanged(path, logger);
-        }
-    }
+    return isCriticalPath(path) ? critical_level : LOG_INFO;
 }
 
 void Hasher::fileChanged(const std::string& path, Logger& logger) {
-    std::error_code ec;
-    if (!std::filesystem::exists(path, ec) || ec) return;
-    if (!std::filesystem::is_regular_file(path, ec) || ec) return;
+    auto state = readFileState(path);
+    if (!state.has_value()) return;
 
-    uint64_t new_hash = 0;
-
-    try {
-        new_hash = calcHash(path);
-    } catch (const std::exception& e) {
-        logger.log(LOG_WARN, "Failed to hash changed file: " + path + " : " + e.what());
+    auto baseline_it = baseline.find(path);
+    if (baseline_it == baseline.end()) {
+        table[path] = *state;
+        logger.log(levelForPath(path, LOG_WARN), "Created: " + path);
         return;
     }
 
-    auto it = baseline.find(path);
-    if (it == baseline.end()) {
-        table[path] = new_hash;
-        LogLevel level = levelForPath(path, LOG_WARN);
-        logger.log(level, "Created: " + path);
-    } else if (it->second != new_hash) {
-        table[path] = new_hash;
-        LogLevel level = levelForPath(path, LOG_WARN);
-        logger.log(level, "Modified: " + path);
+    if (baseline_it->second.hash != state->hash) {
+        table[path] = *state;
+        logger.log(levelForPath(path, LOG_WARN), "Modified: " + path);
+        return;
+    }
+
+    if (table.find(path) == table.end()) {
+        table[path] = *state;
+    }
+}
+
+void Hasher::fileAttributed(const std::string& path, Logger& logger) {
+    auto state = readFileState(path);
+    if (!state.has_value()) return;
+
+    auto runtime_it = table.find(path);
+    auto baseline_it = baseline.find(path);
+    const FileState* reference = nullptr;
+
+    if (runtime_it != table.end()) {
+        reference = &runtime_it->second;
+    } else if (baseline_it != baseline.end()) {
+        reference = &baseline_it->second;
+    }
+
+    if (reference == nullptr) {
+        table[path] = *state;
+        logger.log(levelForPath(path, LOG_WARN), "Created after metadata event: " + path);
+        return;
+    }
+
+    bool content_changed = reference->hash != state->hash;
+    bool metadata_changed = reference->size != state->size ||
+                            reference->permissions != state->permissions ||
+                            reference->write_time_ticks != state->write_time_ticks;
+
+    if (!content_changed && !metadata_changed) return;
+
+    table[path] = *state;
+    LogLevel level = levelForPath(path, content_changed ? LOG_WARN : LOG_INFO);
+    if (content_changed && metadata_changed) {
+        logger.log(level, "Content and metadata changed: " + path);
+    } else if (content_changed) {
+        logger.log(level, "Modified after metadata event: " + path);
+    } else {
+        logger.log(level, "Metadata changed: " + path);
     }
 }
 
 uint64_t Hasher::calcHash(const std::string& path) {
     std::ifstream infile(path, std::ios::binary);
-    if (!infile.is_open())
+    if (!infile.is_open()) {
         throw std::runtime_error("File wasn't opened");
-    XXH64_state_t* state = XXH64_createState();
-    if (!state)
-        throw std::runtime_error("Failed to allocate state");
-    XXH64_reset(state, 0);
-    char buff[8192];
-    while (infile.read(buff, sizeof(buff)) || infile.gcount() > 0) {
-        XXH64_update(state, buff, infile.gcount());
     }
+
+    XXH64_state_t* state = XXH64_createState();
+    if (!state) {
+        throw std::runtime_error("Failed to allocate state");
+    }
+
+    XXH64_reset(state, 0);
+    char buffer[8192];
+    while (infile.read(buffer, sizeof(buffer)) || infile.gcount() > 0) {
+        XXH64_update(state, buffer, infile.gcount());
+    }
+
     uint64_t hash = XXH64_digest(state);
     XXH64_freeState(state);
     return hash;
@@ -137,8 +142,12 @@ void Hasher::syncBaseline(const std::string& path) {
     saveBaseline(path);
 }
 
-bool Hasher::compareHashes(const uint64_t& old_hash, const std::string& path) {
-    return calcHash(path) == old_hash;
+void Hasher::reloadRuntime(const Config& conf) {
+    initHashes(conf);
+}
+
+void Hasher::resetRuntimeToBaseline() {
+    table = baseline;
 }
 
 bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
@@ -149,39 +158,39 @@ bool Hasher::shouldIgnoreDir(const std::filesystem::path& path) {
     return false;
 }
 
-// helper to doublecode sectors for function calcDirHashes
 void Hasher::processFileEntry(const std::filesystem::directory_entry& entry) {
     try {
         std::error_code ec;
-
         if (!entry.is_regular_file(ec) || ec) return;
         if (shouldIgnoreDir(entry.path())) return;
 
-        std::string wfile = entry.path().string();
-        table[wfile] = calcHash(wfile);
+        recordFileState(entry.path().string());
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << '\n';
-    } catch (std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << "Error processing file " << entry.path() << ": " << e.what() << '\n';
     }
 }
 
 void Hasher::calcDirHashes(const std::string& current_path) {
     std::error_code ec;
-
     if (!std::filesystem::exists(current_path, ec) || ec) return;
     if (!std::filesystem::is_directory(current_path, ec) || ec) return;
 
     try {
         if (recursive) {
-            std::filesystem::recursive_directory_iterator it(current_path, std::filesystem::directory_options::skip_permission_denied);
-
+            std::filesystem::recursive_directory_iterator it(
+                current_path,
+                std::filesystem::directory_options::skip_permission_denied
+            );
             for (const auto& file : it) {
                 processFileEntry(file);
             }
         } else {
-            std::filesystem::directory_iterator it(current_path, std::filesystem::directory_options::skip_permission_denied);
-
+            std::filesystem::directory_iterator it(
+                current_path,
+                std::filesystem::directory_options::skip_permission_denied
+            );
             for (const auto& file : it) {
                 processFileEntry(file);
             }
@@ -193,13 +202,25 @@ void Hasher::calcDirHashes(const std::string& current_path) {
 
 void Hasher::loadBaseline(const std::string& path) {
     std::ifstream file(path);
-    if (!file.is_open())
+    if (!file.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
+    }
+
     json j;
     file >> j;
     baseline.clear();
     for (const auto& pair : j.items()) {
-        baseline[pair.key()] = pair.value().get<uint64_t>();
+        if (pair.value().is_number_unsigned()) {
+            baseline[pair.key()] = FileState{pair.value().get<uint64_t>(), 0, 0, 0};
+            continue;
+        }
+
+        FileState state;
+        state.hash = pair.value().value("hash", 0ULL);
+        state.size = pair.value().value("size", 0ULL);
+        state.permissions = pair.value().value("permissions", 0U);
+        state.write_time_ticks = pair.value().value("write_time_ticks", 0LL);
+        baseline[pair.key()] = state;
     }
 }
 
@@ -208,25 +229,108 @@ void Hasher::saveBaseline(const std::string& baseline_path) {
     if (!baselinef.is_open()) {
         throw std::runtime_error("The baseline.json wasn't opened");
     }
+
     json j;
     for (const auto& pair : table) {
-        j[pair.first] = pair.second;
+        j[pair.first] = {
+            {"hash", pair.second.hash},
+            {"size", pair.second.size},
+            {"permissions", pair.second.permissions},
+            {"write_time_ticks", pair.second.write_time_ticks}
+        };
     }
+
     baselinef << j.dump(4);
-    baselinef.close();
 }
 
 void Hasher::initHashes(const Config& conf) {
     table.clear();
-    for (const auto& path : conf.watch_paths)
+    for (const auto& path : conf.watch_paths) {
         calcDirHashes(path);
+    }
 }
 
 void Hasher::deleteHash(const std::string& path, Logger& logger) {
     auto it = table.find(path);
-    if (it != table.end()) {
-        table.erase(it);
-        LogLevel level = levelForPath(path, LOG_ERROR);
-        logger.log(level, "Deleted: " + path);
+    if (it == table.end()) return;
+
+    table.erase(it);
+    logger.log(levelForPath(path, LOG_ERROR), "Deleted: " + path);
+}
+
+void Hasher::deletePathTree(const std::string& path, Logger& logger) {
+    std::vector<std::string> to_delete;
+    for (const auto& [entry_path, state] : table) {
+        if (entry_path == path || entry_path.starts_with(path + "/")) {
+            to_delete.push_back(entry_path);
+        }
     }
+
+    for (const auto& entry_path : to_delete) {
+        deleteHash(entry_path, logger);
+    }
+}
+
+void Hasher::registerPathTree(const std::string& path, Logger& logger) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) return;
+
+    if (std::filesystem::is_regular_file(path, ec) && !ec) {
+        fileChanged(path, logger);
+        return;
+    }
+
+    if (!std::filesystem::is_directory(path, ec) || ec) return;
+    if (shouldIgnoreDir(path)) return;
+
+    if (recursive) {
+        std::filesystem::recursive_directory_iterator it(
+            path,
+            std::filesystem::directory_options::skip_permission_denied
+        );
+        for (const auto& entry : it) {
+            processFileEntry(entry);
+        }
+    } else {
+        std::filesystem::directory_iterator it(
+            path,
+            std::filesystem::directory_options::skip_permission_denied
+        );
+        for (const auto& entry : it) {
+            processFileEntry(entry);
+        }
+    }
+}
+
+void Hasher::movePathTree(const std::string& old_path, const std::string& new_path, Logger& logger, bool is_directory) {
+    LogLevel level = (isCriticalPath(old_path) || isCriticalPath(new_path)) ? LOG_WARN : LOG_INFO;
+
+    if (!is_directory) {
+        auto state = readFileState(new_path);
+        table.erase(old_path);
+        if (state.has_value()) {
+            table[new_path] = *state;
+        }
+        logger.log(level, "Moved: " + old_path + " -> " + new_path);
+        return;
+    }
+
+    std::vector<std::pair<std::string, FileState>> moved_entries;
+    std::vector<std::string> old_entries;
+    for (const auto& [entry_path, state] : table) {
+        if (entry_path == old_path || entry_path.starts_with(old_path + "/")) {
+            std::string suffix = entry_path.substr(old_path.size());
+            moved_entries.push_back({new_path + suffix, state});
+            old_entries.push_back(entry_path);
+        }
+    }
+
+    for (const auto& entry_path : old_entries) {
+        table.erase(entry_path);
+    }
+    for (const auto& [entry_path, state] : moved_entries) {
+        table[entry_path] = state;
+    }
+    registerPathTree(new_path, logger);
+    logger.log(level, "Moved: " + old_path + " -> " + new_path);
 }
