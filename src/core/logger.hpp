@@ -36,7 +36,8 @@ private:
     uint8_t reserved : 1;
 
     std::string path;
-    std::string login_path;
+    std::string serverIp;
+    std::string serverPort;
     std::ofstream file;
 
 public:
@@ -53,7 +54,8 @@ public:
            bool _colored = true,
            bool _timestamp = true,
            bool _server_logging = false,
-           std::string _login_path = {});
+           std::string _serverIp = "",
+	   std::string _serverPort = "10101");
 
     void log(LogLevel level, const std::string& str);
 };

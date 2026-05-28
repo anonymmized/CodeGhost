@@ -13,6 +13,8 @@ struct Config {
     int start_hour;
     int end_hour;
     bool watch_recursive = true;
+    std::string server_ip;
+    std::string server_port = "10101";
 };
 
 void daemonise(bool silent = true);

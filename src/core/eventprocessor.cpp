@@ -50,25 +50,19 @@ void Processor::initLogger() {
     std::filesystem::path parent = log_path.parent_path();
     std::filesystem::create_directories(parent);
 
-    if (!args.loginPath.empty()) {
-        std::ifstream login_file(args.loginPath);
-        if (!login_file.is_open()) {
-            throw std::runtime_error("Failed to open login credentials file: " + args.loginPath);
-        }
-    }
-
     logger = std::make_unique<Logger>(
         args.logPath,
         LOG_INFO,
         LOG_INFO,
         true,
         true,
-        !args.loginPath.empty(),
-        args.loginPath
+        !args.serverIp.empty(),
+        args.serverIp.empty() ? args.serverIp : "",
+	args.serverPort.empty() ? args.serverPort : "10101",
     );
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
-    if (!args.loginPath.empty()) {
-        logger->log(LOG_INFO, "Server logging credentials configured: " + args.loginPath);
+    if (!args.serverIp.empty()) {
+        logger->log(LOG_INFO, "Trying to connect to server: " + args.serverIp );
     }
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
 }

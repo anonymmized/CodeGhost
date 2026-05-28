@@ -6,13 +6,20 @@
 #include <syslog.h>
 #include <utility>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
+
 Logger::Logger(const std::string& _path,
                uint8_t _log_level,
                uint8_t _tty_level,
                bool _colored,
                bool _timestamp,
                bool _server_logging,
-               std::string _login_path)
+               std::string _serverIp,
+	       std::string _serverPort)
     : log_level(_log_level & 0x03),
       tty_level(_tty_level & 0x03),
       colored(_colored ? 1u : 0u),
@@ -20,14 +27,37 @@ Logger::Logger(const std::string& _path,
       server_logging(_server_logging ? 1u : 0u),
       reserved(0),
       path(_path),
-      login_path(std::move(_login_path)),
+      serverIp(std::move(_serverIp)),
+      serverPort(std::move(_serverPort)),
       file(_path, std::ios::app | std::ios::out) {
     if (!file.is_open()) {
         openlog("codeghost", LOG_PID | LOG_CONS, LOG_DAEMON);
         syslog(LOG_ERR, "Failed to open logfile: %s", path.c_str());
-        closelog();
+        //closelog();
         throw std::runtime_error("Failed to open logfile: " + path);
     }
+    if (server_logging && !serverIp.empty()) {
+	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sock < 0) {
+	    syslog(LOG_ERR, "Failed to initialize socket");  
+	    return;
+	}
+	sockaddr_in dest{};
+	dest.sin_family = AF_INET;
+	dest.sin_port = htons(serverPort);
+	if (inet_pton(AF_INET, serverIp, &dest.sin_addr) != 1 ) {
+	    syslog(LOG_ERR, "Invalid IP address");
+	    close(sock);
+	    return;
+	}
+	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp, serverPort);
+    }
+    closelog();
+}
+
+Logger::~Logger(){
+	close(sock);
+	//
 }
 
 void Logger::log(LogLevel level, const std::string& str) {
@@ -61,7 +91,21 @@ void Logger::log(LogLevel level, const std::string& str) {
         std::cout << '\n';
     }
 
-    if (server_logging && !login_path.empty()) {
-        // The credentials path is now carried through logger settings for future remote transport integration.
+    if (server_logging && !serverIp.empty()) {
+    	//server.log(); //UDP send
+	    std::string msg = "";
+	    if (timestamp) msg = msg + std::put_time(&tm, "%d.%m.%y %H:%M:%S");
+	    msg += strLevels[lvl];
+	    msg += str;
+	    ssize_t msglen = static_cast<ssize_t>(strlen(msg));
+	    ssize_t sent = sendto(sock,
+                                  msg,
+				  msglen,
+				  0,
+				  reinterpret_cast<sockaddr*>(&dest),
+				  sizeof(dest));
+	    if (sent<0) {
+		syslog("UDP sent failed");
+	    }
     }
 }
