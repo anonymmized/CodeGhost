@@ -1,5 +1,0 @@
-3:FilesystemMonitoringIntegrationTest.WatcherReceivesCreateEvent
-4:WatcherIntegrationTest.ReceivesDeleteEvent
-5:WatcherIntegrationTest.ReceivesModifyEvent
-6:WatcherIntegrationTest.RecursiveWatchReceivesCreateEventInSubdirectory
-7:WatcherIntegrationTest.RecursiveWatchSkipsIgnoredDirectory

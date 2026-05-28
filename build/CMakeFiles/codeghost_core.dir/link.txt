@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcodeghost_core.a CMakeFiles/codeghost_core.dir/src/cli/cli.cpp.o CMakeFiles/codeghost_core.dir/src/core/daemon.cpp.o CMakeFiles/codeghost_core.dir/src/core/eventprocessor.cpp.o CMakeFiles/codeghost_core.dir/src/core/hasher.cpp.o CMakeFiles/codeghost_core.dir/src/core/logger.cpp.o CMakeFiles/codeghost_core.dir/src/core/watcher.cpp.o CMakeFiles/codeghost_core.dir/src/utils/utils.cpp.o
-/usr/bin/ranlib libcodeghost_core.a
