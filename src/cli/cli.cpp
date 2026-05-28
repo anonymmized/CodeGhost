@@ -20,9 +20,11 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
             args.configPath = arg.substr(9);
         } else if (arg.rfind("--log=", 0) == 0) {
             args.logPath = arg.substr(6);
-        } else if (arg.rfind("--login=", 0) == 0) {
-            args.loginPath = arg.substr(8);
-        } else {
+        } else if (arg.rfind("--server=", 0) == 0) {
+            args.serverIp = arg.substr(9);
+        } else if (arg.rfind("--port=", 0) == 0) {
+	    args.serverPort = arg.substr(7);
+	} else {
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage();
             std::exit(1);
@@ -48,6 +50,7 @@ void CliParser::printUsage() {
         << " --daemonise          run as background daemon\n"
         << " --approve-runtime    persist current runtime snapshot as trusted baseline\n"
         << " --reload-runtime     rebuild runtime state from filesystem without changing baseline\n"
-        << " --login=<path>       path to server login credentials file\n"
+        << " --server=<ip>        remote logging server ip\n"
+	<< " --port=<port>        remote logging server port\n"
         << " --log=<path>         path to log file (default: daemon.log)\n";
 }

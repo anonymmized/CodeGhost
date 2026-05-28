@@ -8,7 +8,8 @@ struct CliArgs {
     bool reloadRuntime = false;
     std::string configPath;
     std::string logPath;
-    std::string loginPath;
+    std::string serverIp;
+    std::string serverPort;
 };
 
 class CliParser {
