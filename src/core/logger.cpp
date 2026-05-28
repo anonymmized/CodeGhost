@@ -39,18 +39,24 @@ Logger::Logger(const std::string& _path,
     if (server_logging && !serverIp.empty()) {
 	int sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0) {
-	    syslog(LOG_ERR, "Failed to initialize socket");  
+	    syslog(LOG_ERR, "Failed to initialize socket");
 	    return;
 	}
 	sockaddr_in dest{};
 	dest.sin_family = AF_INET;
-	dest.sin_port = htons(serverPort);
-	if (inet_pton(AF_INET, serverIp, &dest.sin_addr) != 1 ) {
+	int serverPort_i = std::stoi(serverPort);
+    if (serverPort_i > 65535 || serverPort_i < 0) {
+        syslog(LOG_ERR, "Invalid port.");
+        close(sock);
+        return;
+    }
+    dest.sin_port = htons(std::stoi(serverPort));
+	if (inet_pton(AF_INET, serverIp.c_str(), &dest.sin_addr) != 1 ) {
 	    syslog(LOG_ERR, "Invalid IP address");
 	    close(sock);
 	    return;
 	}
-	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp, serverPort);
+	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp.c_str(), serverPort);
     }
     closelog();
 }
@@ -97,15 +103,10 @@ void Logger::log(LogLevel level, const std::string& str) {
 	    if (timestamp) msg = msg + std::put_time(&tm, "%d.%m.%y %H:%M:%S");
 	    msg += strLevels[lvl];
 	    msg += str;
-	    ssize_t msglen = static_cast<ssize_t>(strlen(msg));
-	    ssize_t sent = sendto(sock,
-                                  msg,
-				  msglen,
-				  0,
-				  reinterpret_cast<sockaddr*>(&dest),
-				  sizeof(dest));
+	    ssize_t msglen = static_cast<ssize_t>(msg.size());
+	    ssize_t sent = sendto(sock, msg.c_str(), msglen, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 	    if (sent<0) {
-		syslog("UDP sent failed");
+		    syslog("UDP sent failed");
 	    }
     }
 }
