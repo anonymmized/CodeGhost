@@ -4,7 +4,8 @@
 #include <cstdint>
 #include <fstream>
 #include <string>
-
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include "./runtime_constants.hpp"
 
 enum LogLevel {
@@ -39,8 +40,10 @@ private:
     std::string serverIp;
     std::string serverPort;
     std::ofstream file;
-
+    int sock = -1;
+    sockaddr_in dest{};
 public:
+    ~Logger();
     uint8_t getLogLevel() { return log_level; }
     uint8_t getTtyLevel() { return tty_level; }
     uint8_t getColored() { return colored; }

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <syslog.h>
 #include <utility>
-
+#include <sstream>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -37,12 +37,11 @@ Logger::Logger(const std::string& _path,
         throw std::runtime_error("Failed to open logfile: " + path);
     }
     if (server_logging && !serverIp.empty()) {
-	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0) {
 	    syslog(LOG_ERR, "Failed to initialize socket");
 	    return;
 	}
-	sockaddr_in dest{};
 	dest.sin_family = AF_INET;
 	int serverPort_i = std::stoi(serverPort);
     if (serverPort_i > 65535 || serverPort_i < 0) {
@@ -56,7 +55,7 @@ Logger::Logger(const std::string& _path,
 	    close(sock);
 	    return;
 	}
-	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp.c_str(), serverPort);
+	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp.c_str(), serverPort.c_str());
     }
     closelog();
 }
@@ -100,13 +99,17 @@ void Logger::log(LogLevel level, const std::string& str) {
     if (server_logging && !serverIp.empty()) {
     	//server.log(); //UDP send
 	    std::string msg = "";
-	    if (timestamp) msg = msg + std::put_time(&tm, "%d.%m.%y %H:%M:%S");
+	    if (timestamp) {
+	    	std::ostringstream oss;
+		oss << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
+		msg += oss.str();
+	    }
 	    msg += strLevels[lvl];
 	    msg += str;
 	    ssize_t msglen = static_cast<ssize_t>(msg.size());
 	    ssize_t sent = sendto(sock, msg.c_str(), msglen, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
 	    if (sent<0) {
-		    syslog("UDP sent failed");
+		    syslog(LOG_ERR, "UDP sent failed");
 	    }
     }
 }
