@@ -33,7 +33,7 @@ Logger::Logger(const std::string& _path,
     if (!file.is_open()) {
         openlog("codeghost", LOG_PID | LOG_CONS, LOG_DAEMON);
         syslog(LOG_ERR, "Failed to open logfile: %s", path.c_str());
-        //closelog();
+	closelog();
         throw std::runtime_error("Failed to open logfile: " + path);
     }
     if (server_logging && !serverIp.empty()) {
@@ -49,7 +49,7 @@ Logger::Logger(const std::string& _path,
         close(sock);
         return;
     }
-    dest.sin_port = htons(std::stoi(serverPort));
+    dest.sin_port = htons(serverPort_i);
 	if (inet_pton(AF_INET, serverIp.c_str(), &dest.sin_addr) != 1 ) {
 	    syslog(LOG_ERR, "Invalid IP address");
 	    close(sock);
@@ -57,12 +57,10 @@ Logger::Logger(const std::string& _path,
 	}
 	syslog(LOG_INFO, "Socket is open on %s:%s", serverIp.c_str(), serverPort.c_str());
     }
-    closelog();
 }
 
 Logger::~Logger(){
-	close(sock);
-	//
+  if (sock >= 0) close(sock);
 }
 
 void Logger::log(LogLevel level, const std::string& str) {
@@ -74,13 +72,13 @@ void Logger::log(LogLevel level, const std::string& str) {
     localtime_r(&t, &tm);
 
     uint32_t lvl = static_cast<uint32_t>(level);
-    if (level >= log_level) {
-        if (timestamp) {
-            file << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
-        }
-        file << strLevels[lvl] << str << '\n';
-        file.flush();
+
+    if (timestamp) {
+      file << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
     }
+    file << strLevels[lvl] << str << '\n';
+    file.flush();
+    
 
     if (level >= tty_level) {
         if (colored) {
@@ -97,19 +95,20 @@ void Logger::log(LogLevel level, const std::string& str) {
     }
 
     if (server_logging && !serverIp.empty()) {
-    	//server.log(); //UDP send
-	    std::string msg = "";
-	    if (timestamp) {
-	    	std::ostringstream oss;
-		oss << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
-		msg += oss.str();
-	    }
-	    msg += strLevels[lvl];
-	    msg += str;
-	    ssize_t msglen = static_cast<ssize_t>(msg.size());
-	    ssize_t sent = sendto(sock, msg.c_str(), msglen, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
-	    if (sent<0) {
-		    syslog(LOG_ERR, "UDP sent failed");
-	    }
+      //server.log(); //UDP send
+      std::string msg = "";
+      if (timestamp) {
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d.%m.%y %H:%M:%S");
+	msg += oss.str();
+      }
+      msg += strLevels[lvl];
+      msg += str;
+      ssize_t msglen = static_cast<ssize_t>(msg.size());
+      ssize_t sent = sendto(sock, msg.c_str(), msglen, 0, reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
+      if (sent < 0) {
+	syslog(LOG_ERR, "UDP sent failed");
+	return;
+      }
     }
 }
