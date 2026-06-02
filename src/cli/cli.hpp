@@ -10,6 +10,9 @@ struct CliArgs {
     std::string logPath;
     std::string serverIp;
     std::string serverPort;
+    std::string serverUrl;
+    int pollInterval = 30;
+    std::string pendingPath;
 };
 
 class CliParser {

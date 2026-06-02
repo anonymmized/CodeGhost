@@ -5,6 +5,7 @@
 #include "./daemon.hpp"
 #include "./hasher.hpp"
 #include "./logger.hpp"
+#include "./notifier.hpp"
 #include "./watcher.hpp"
 
 #include <chrono>
@@ -42,6 +43,8 @@ private:
     std::unique_ptr<Logger> logger;
     std::unique_ptr<Watcher> watcher;
     std::unique_ptr<Hasher> hasher;
+    std::unique_ptr<Notifier> notifier;
+    std::chrono::steady_clock::time_point last_poll_time;
     std::unordered_map<std::string, std::vector<FsEvent>> pending_events;
     std::unordered_map<uint32_t, PendingMove> pending_moves;
     int argc = 0;
@@ -50,6 +53,10 @@ private:
     void processMoveTo(const std::string& new_path, uint32_t cookie, bool is_dir);
     void processExpiredMoves();
     void applyRuntimeFlags();
+    void initNotifier();
+    void sendAlert(const std::string& path, const std::string& reason,
+                   uint64_t old_hash, uint64_t new_hash);
+    void pollApprovals();
 
 public:
     void prepareConfig();

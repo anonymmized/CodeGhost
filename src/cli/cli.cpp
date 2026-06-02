@@ -24,6 +24,12 @@ CliArgs CliParser::parse(int argc, char* argv[]) {
             args.serverIp = arg.substr(9);
         } else if (arg.rfind("--port=", 0) == 0) {
 	    args.serverPort = arg.substr(7);
+	} else if (arg.rfind("--server-url=", 0) == 0) {
+	  args.serverUrl = arg.substr(13);
+	} else if (arg.rfind("--poll-interval=", 0) == 0) {
+	  args.pollInterval = std::stoi(arg.substr(16));
+	} else if (arg.rfind("--pending=", 0) == 0) {
+	  args.pendingPath = arg.substr(10);
 	} else {
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage();
@@ -52,5 +58,8 @@ void CliParser::printUsage() {
         << " --reload-runtime     rebuild runtime state from filesystem without changing baseline\n"
         << " --server=<ip>        remote logging server ip\n"
 	<< " --port=<port>        remote logging server port\n"
-        << " --log=<path>         path to log file (default: daemon.log)\n";
+        << " --log=<path>         path to log file (default: daemon.log)\n"
+        << " --server-url=<url>    admin server url (e.g. http://127.0.0.1:5000)\n"
+        << " --poll-interval=<s>   approval poll interval in seconds (default: 30)\n"
+	<< " --pending=<path>      path to pending.json (default: /var/lib/codeghost/pending.json)\n";
 }

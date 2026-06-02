@@ -334,3 +334,9 @@ void Hasher::movePathTree(const std::string& old_path, const std::string& new_pa
     registerPathTree(new_path, logger);
     logger.log(level, "Moved: " + old_path + " -> " + new_path);
 }
+
+void Hasher::approveFile(const std::string& path) {
+  auto it = table.find(path);
+  if (it == table.end()) return;
+  baseline[path] = it->second;
+}

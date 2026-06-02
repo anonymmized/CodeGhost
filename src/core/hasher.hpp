@@ -55,4 +55,5 @@ public:
     void fileAttributed(const std::string& path, Logger& logger);
     void registerPathTree(const std::string& path, Logger& logger);
     void movePathTree(const std::string& old_path, const std::string& new_path, Logger& logger, bool is_directory);
+    void approveFile(const std::string& path);
 };

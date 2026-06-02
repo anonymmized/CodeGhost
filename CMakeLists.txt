@@ -40,6 +40,7 @@ add_library(codeghost_core
     src/core/eventprocessor.cpp
     src/core/hasher.cpp
     src/core/logger.cpp
+    src/core/notifier.cpp
     src/core/watcher.cpp
     src/utils/utils.cpp
 )
@@ -57,6 +58,7 @@ target_link_libraries(codeghost_core
         Threads::Threads
         ${XXHASH_LIBRARY}
         nlohmann_json::nlohmann_json
+	httplib::httplib
 )
 
 # Create executable file codeghost from main.cpp

@@ -1,5 +1,5 @@
 #include "./eventprocessor.hpp"
-
+#include "./notifier.hpp"
 #include "./runtime_constants.hpp"
 
 #include <atomic>
@@ -34,7 +34,6 @@ void Processor::prepareConfig() {
             logger->log(LOG_ERROR, "Failed to create config directory: " + parent.string() + " : " + ec.message());
             throw std::runtime_error("Failed to create config directory");
         }
-
         Config new_config = createDefaultConfig();
         uploadToConfig(new_config, std::string(runtime::DEFAULT_CONFIG_PATH));
         logger->log(LOG_INFO, "Default config created: " + args.configPath);
@@ -58,11 +57,11 @@ void Processor::initLogger() {
         true,
         !args.serverIp.empty(),
         args.serverIp.empty() ? args.serverIp : "",
-	args.serverPort.empty() ? args.serverPort : "10101"
+        args.serverPort.empty() ? args.serverPort : "10101"
     );
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     if (!args.serverIp.empty()) {
-        logger->log(LOG_INFO, "Trying to connect to server: " + args.serverIp );
+        logger->log(LOG_INFO, "Trying to connect to server: " + args.serverIp);
     }
     logger->log(LOG_INFO, std::string(argv[0]) + " started.");
 }
@@ -103,12 +102,23 @@ void Processor::initHasher() {
     hasher = std::make_unique<Hasher>(config.ignore_paths, config.critical_paths, config.watch_recursive);
 }
 
+void Processor::initNotifier() {
+    if (args.serverUrl.empty()) return;
+
+    if (args.pendingPath.empty()) {
+        args.pendingPath = std::string(runtime::DEFAULT_PENDING_PATH);
+    }
+
+    notifier = std::make_unique<Notifier>(args.serverUrl);
+    notifier->init(args.pendingPath);
+    logger->log(LOG_INFO, "Notifier initialized: " + args.serverUrl);
+}
+
 void Processor::applyRuntimeFlags() {
     if (args.reloadRuntime) {
         hasher->reloadRuntime(config);
         logger->log(LOG_INFO, "Runtime state rebuilt from filesystem. Baseline was not changed.");
     }
-
     if (args.approveRuntime) {
         hasher->syncBaseline(std::string(runtime::DEFAULT_BASELINE_PATH));
         logger->log(LOG_INFO, "Runtime state approved and persisted as new baseline.");
@@ -153,14 +163,12 @@ void Processor::processExpiredMoves() {
             ++it;
             continue;
         }
-
         if (it->second.is_dir) {
             watcher->removeSubtree(it->second.old_path);
             hasher->deletePathTree(it->second.old_path, *logger);
         } else {
             hasher->deleteHash(it->second.old_path, *logger);
         }
-
         it = pending_moves.erase(it);
     }
 }
@@ -177,12 +185,10 @@ void Processor::collectEvent(inotify_event* event) {
         pending_moves[event->cookie] = PendingMove{full_path, now, is_dir};
         return;
     }
-
     if (event->mask & IN_MOVED_TO) {
         processMoveTo(full_path, event->cookie, is_dir);
         return;
     }
-
     if (event->mask & IN_CREATE) {
         pending_events[full_path].push_back({EventType::Create, event->cookie, now, is_dir});
     }
@@ -205,20 +211,11 @@ EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
 
     for (const auto& event : events) {
         switch (event.type) {
-            case EventType::Create:
-                has_create = true;
-                break;
-            case EventType::Modify:
-                has_modify = true;
-                break;
-            case EventType::Delete:
-                has_delete = true;
-                break;
-            case EventType::Attrib:
-                has_attrib = true;
-                break;
-            default:
-                break;
+            case EventType::Create: has_create = true; break;
+            case EventType::Modify: has_modify = true; break;
+            case EventType::Delete: has_delete = true; break;
+            case EventType::Attrib: has_attrib = true; break;
+            default: break;
         }
     }
 
@@ -229,46 +226,60 @@ EventType Processor::normalizeEvents(const std::vector<FsEvent>& events) {
     return events.back().type;
 }
 
+void Processor::sendAlert(const std::string& path, const std::string& reason,
+                          uint64_t old_hash, uint64_t new_hash) {
+    if (!notifier) return;
+
+    Alert a;
+    a.file_path  = path;
+    a.reason     = reason;
+    a.old_hash   = old_hash;
+    a.new_hash   = new_hash;
+
+    notifier->sendOrQueue(a, args.pendingPath, *logger);
+}
+
 void Processor::processPendingEvents() {
     auto now = std::chrono::steady_clock::now();
 
     for (auto it = pending_events.begin(); it != pending_events.end();) {
-        const std::string& path = it->first;
+        const std::string& path   = it->first;
         const std::vector<FsEvent>& events = it->second;
 
-        if (events.empty()) {
-            it = pending_events.erase(it);
-            continue;
-        }
+        if (events.empty()) { it = pending_events.erase(it); continue; }
 
         const auto& last_event = events.back();
-        if (now - last_event.timestamp < runtime::EVENT_DEBOUNCE) {
-            ++it;
-            continue;
-        }
+        if (now - last_event.timestamp < runtime::EVENT_DEBOUNCE) { ++it; continue; }
 
-        EventType type = normalizeEvents(events);
-        bool is_dir = last_event.is_dir;
+        EventType type   = normalizeEvents(events);
+        bool      is_dir = last_event.is_dir;
+
         switch (type) {
             case EventType::Modify:
                 try {
+                    uint64_t old_hash = hasher->getHash(path);
                     hasher->fileChanged(path, *logger);
+                    sendAlert(path, "modified", old_hash, hasher->getHash(path));
                 } catch (const std::exception& e) {
                     logger->log(LOG_WARN, "Failed to process modified path: " + path + " : " + e.what());
                 }
                 break;
+
             case EventType::Delete:
                 try {
+                    uint64_t old_hash = hasher->getHash(path);
                     if (is_dir) {
                         watcher->removeSubtree(path);
                         hasher->deletePathTree(path, *logger);
                     } else {
                         hasher->deleteHash(path, *logger);
+                        sendAlert(path, "deleted", old_hash, 0);
                     }
                 } catch (const std::exception& e) {
                     logger->log(LOG_WARN, "Failed to process deleted path: " + path + " : " + e.what());
                 }
                 break;
+
             case EventType::Create:
                 try {
                     if (is_dir) {
@@ -276,25 +287,49 @@ void Processor::processPendingEvents() {
                         hasher->registerPathTree(path, *logger);
                     } else {
                         hasher->fileChanged(path, *logger);
+                        sendAlert(path, "created", 0, hasher->getHash(path));
                     }
                 } catch (const std::exception& e) {
                     logger->log(LOG_WARN, "Failed to process created path: " + path + " : " + e.what());
                 }
                 break;
+
             case EventType::Attrib:
                 try {
                     if (!is_dir) {
+                        uint64_t old_hash = hasher->getHash(path);
                         hasher->fileAttributed(path, *logger);
+                        sendAlert(path, "attrib", old_hash, hasher->getHash(path));
                     }
                 } catch (const std::exception& e) {
                     logger->log(LOG_WARN, "Failed to process metadata change: " + path + " : " + e.what());
                 }
                 break;
+
             default:
                 break;
         }
 
         it = pending_events.erase(it);
+    }
+}
+
+void Processor::pollApprovals() {
+    if (!notifier) return;
+
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_poll_time < std::chrono::seconds(args.pollInterval)) return;
+    last_poll_time = now;
+
+    auto approved = notifier->pollApprovals(*logger);
+    for (const auto& path : approved) {
+        hasher->approveFile(path);
+        logger->log(LOG_INFO, "Approved: " + path);
+    }
+
+    if (!approved.empty()) {
+        hasher->saveBaseline(std::string(runtime::DEFAULT_BASELINE_PATH));
+        logger->log(LOG_INFO, "Baseline updated after approvals");
     }
 }
 
@@ -307,7 +342,7 @@ void Processor::run(int _argc, char** _argv) {
     sa.sa_handler = handleSig;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGINT,  &sa, nullptr);
     sigaction(SIGTERM, &sa, nullptr);
 
     argc = _argc;
@@ -319,6 +354,7 @@ void Processor::run(int _argc, char** _argv) {
     prepareConfig();
     initConfig();
     validateWatchPaths();
+
     if (config.watch_paths.empty()) {
         logger->log(LOG_ERROR, "No valid watch paths left");
         return;
@@ -326,9 +362,13 @@ void Processor::run(int _argc, char** _argv) {
 
     initWatcher();
     initHasher();
+    initNotifier();
+
+    last_poll_time = std::chrono::steady_clock::now();
 
     if (!std::filesystem::exists(runtime::DEFAULT_BASELINE_PATH)) {
-        std::filesystem::create_directories(std::filesystem::path(runtime::DEFAULT_BASELINE_PATH).parent_path());
+        std::filesystem::create_directories(
+            std::filesystem::path(runtime::DEFAULT_BASELINE_PATH).parent_path());
         hasher->initHashes(config);
         hasher->saveBaseline(std::string(runtime::DEFAULT_BASELINE_PATH));
         logger->log(LOG_INFO, "Baseline created: " + std::string(runtime::DEFAULT_BASELINE_PATH));
@@ -336,6 +376,7 @@ void Processor::run(int _argc, char** _argv) {
         hasher->loadBaselineFile(std::string(runtime::DEFAULT_BASELINE_PATH));
     }
     logger->log(LOG_INFO, "Baseline initialized.");
+
     applyRuntimeFlags();
 
     if (config.watch_recursive) {
@@ -350,19 +391,18 @@ void Processor::run(int _argc, char** _argv) {
         }
     }
 
-    char buffer[runtime::INOTIFY_BUFFER_SIZE];
     for (const auto& [wd, path] : watcher->getWatchTable()) {
         logger->log(LOG_INFO, "Watching: " + path);
     }
 
+    char buffer[runtime::INOTIFY_BUFFER_SIZE];
+
     while (running.load()) {
         pollfd pfd{watcher->getFd(), POLLIN, 0};
         int ready = poll(&pfd, 1, runtime::POLL_TIMEOUT_MS);
+
         if (ready < 0) {
-            if (errno == EINTR) {
-                if (!running.load()) break;
-                continue;
-            }
+            if (errno == EINTR) { if (!running.load()) break; continue; }
             logger->log(LOG_ERROR, "poll() failed");
             break;
         }
@@ -370,15 +410,14 @@ void Processor::run(int _argc, char** _argv) {
         if (ready == 0) {
             processExpiredMoves();
             processPendingEvents();
+            pollApprovals();
+            if (notifier) notifier->retryPending(args.pendingPath, *logger);
             continue;
         }
 
         int len = read(watcher->getFd(), buffer, sizeof(buffer));
         if (len < 0) {
-            if (errno == EINTR) {
-                if (!running.load()) break;
-                continue;
-            }
+            if (errno == EINTR) { if (!running.load()) break; continue; }
             logger->log(LOG_ERROR, "read() failed");
             break;
         }
@@ -393,6 +432,8 @@ void Processor::run(int _argc, char** _argv) {
 
         processExpiredMoves();
         processPendingEvents();
+        pollApprovals();
+        if (notifier) notifier->retryPending(args.pendingPath, *logger);
     }
 
     logger->log(LOG_INFO, "Daemon stopped");
