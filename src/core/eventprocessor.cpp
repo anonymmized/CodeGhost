@@ -57,8 +57,8 @@ void Processor::initLogger() {
         true,
         true,
         !args.serverIp.empty(),
-        args.serverIp.empty() ? args.serverIp : "",
-	args.serverPort.empty() ? args.serverPort : "10101"
+        args.serverIp,
+        args.serverPort.empty() ? "10101" : args.serverPort
     );
     logger->log(LOG_INFO, "Logging to: " + args.logPath);
     if (!args.serverIp.empty()) {

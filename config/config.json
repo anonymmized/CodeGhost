@@ -1,0 +1,15 @@
+{
+    "watch_paths": [
+        "/data"
+    ],
+    "ignore_paths": [
+        "/data/cache",
+        "/data/tmp"
+    ],
+    "critical_paths": [
+        "/data/etc"
+    ],
+    "start_hour": 0,
+    "end_hour": 23,
+    "watch_recursive": true
+}
