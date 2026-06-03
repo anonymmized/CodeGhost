@@ -24,11 +24,20 @@ find_path(XXHASH_INCLUDE_DIR xxhash.h REQUIRED)
 find_library(XXHASH_LIBRARY xxhash REQUIRED)
 
 # Announces external resource (googletest) with URL archive. Just announce not download
-FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-    DOWNLOAD_EXTRACT_TIMESTAMP true
-)
+# DOWNLOAD_EXTRACT_TIMESTAMP was added in CMake 3.24; guard it so older CMake
+# (e.g. 3.22) doesn't mis-parse it as a second URL list entry.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP true
+    )
+else()
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    )
+endif()
 
 # Downloads and make available announced googletest
 FetchContent_MakeAvailable(googletest)
