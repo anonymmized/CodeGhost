@@ -10,10 +10,5 @@ struct CliArgs {
     std::string logPath;
     std::string serverIp;
     std::string serverPort;
-};
-
-class CliParser {
-public:
-    static CliArgs parse(int argc, char* argv[]);
-    static void printUsage();
+    CliArgs parse(int argc, char* argv[]);
 };

@@ -12,21 +12,21 @@
 
 using json = nlohmann::ordered_json;
 
-void daemonise(bool silent) {
+void daemoniseProcess() {
     pid_t pid = fork();
-    if (pid < 0) exit(EXIT_FAILURE);
-    if (pid > 0) {
+    if (pid < 0) { // Error
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0) { // Parent
         std::cout << "daemon PID: " << pid << '\n';
         exit(EXIT_SUCCESS);
     }
-
+    // Child
     setsid();
-    if (silent) {
-        int fd = open("/dev/null", O_RDWR);
-        dup2(fd, 0);
-        dup2(fd, 1);
-        dup2(fd, 2);
-    }
+    int fileDescriptor = open("/dev/null", O_RDWR);
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
 }
 
 

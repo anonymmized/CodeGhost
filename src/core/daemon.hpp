@@ -17,7 +17,7 @@ struct Config {
     std::string server_port = "10101";
 };
 
-void daemonise(bool silent = true);
+void daemoniseProcess();
 Config loadFromConfig(const std::string& path);
 void uploadToConfig(const Config& conf, const std::string& path);
 

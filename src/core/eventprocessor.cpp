@@ -68,6 +68,7 @@ void Processor::initLogger() {
 }
 
 void Processor::initConfig() {
+    prepareConfig();
     config = loadFromConfig(args.configPath);
     logger->log(LOG_INFO, "Config loaded: " + args.configPath);
     logger->log(LOG_INFO, "Recursive mode: " + std::to_string(config.watch_recursive));
