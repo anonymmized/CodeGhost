@@ -119,6 +119,10 @@ int Application::run() {
     if (command_.commandName == CommandName::Version) {
         printVersion();
     }
-
+    if (command_.commandName == CommandName::AddConfig) {
+        Config newConfig = getConfig(command_.pathToConfig);
+        validateConfig(newConfig);
+        saveConfig(config, command_.pathToConfig);
+    }
     return 0;
 }
