@@ -119,5 +119,6 @@ int Application::run() {
     if (command_.commandName == CommandName::Version) {
         printVersion();
     }
+
     return 0;
 }
