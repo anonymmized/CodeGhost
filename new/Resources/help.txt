@@ -1,0 +1,76 @@
+CodeGhost — File Integrity Monitoring
+
+  USAGE
+      codeghost <command> [argument]
+
+  COMMANDS
+      start <path>
+          Start monitoring a directory.
+          Return its monitoring ID.
+          This command does not create a trusted baseline.
+
+      stop <id>
+          Stop monitoring and remove the directory from the active list.
+          Keep its baseline and event history.
+
+      pause <id>
+          Pause monitoring without removing the directory.
+
+      resume <id>
+          Resume monitoring and rescan the directory for changes
+          that occurred while monitoring was paused.
+
+      list
+      ls
+          List monitored directories with their IDs, monitoring status,
+          and baseline status.
+
+      baseline <id>
+      bsl <id>
+          Scan the directory and display the proposed baseline.
+          Ask for confirmation before creating or updating the baseline.
+          An incomplete or failed scan cannot become a trusted baseline.
+
+      check_cfg
+      cc
+          Check the current configuration and report errors.
+
+      add_cfg <path>
+      ac <path>
+          Select a configuration file.
+
+      help
+          Display this help page.
+
+      version
+      v
+          Display the program version and release notes.
+
+  ARGUMENTS
+      <path>
+          A directory path for start or a configuration file path
+          for add_cfg. Enclose paths containing spaces in quotes.
+
+      <id>
+          The monitoring ID shown by list.
+          Enter an unsigned decimal integer.
+
+  EXAMPLES
+      codeghost start /etc/myapp
+      codeghost start "/home/user/My Project"
+      codeghost list
+      codeghost baseline 1
+      codeghost pause 1
+      codeghost resume 1
+      codeghost stop 1
+      codeghost add_cfg /etc/codeghost/config.json
+      codeghost check_cfg
+      codeghost version
+
+  NOTES
+      Each invocation accepts one command.
+      start accepts one directory per invocation.
+      Run start again to add another directory.
+      Monitoring IDs are identifiers, not positions in the list.
+      Unknown commands, missing arguments, and extra arguments are rejected.
+      Monitoring does not modify the files being monitored.
