@@ -1,14 +1,16 @@
 #include "Application/application.hpp"
+#include "Resources/info.hpp"
 
 #include <string>
+#include <charconv>
 #include <iostream>
 
 namespace {
     std::string buildLine(int argc, char* argv[]) {
         std::string finLine;
         int i = 0;
-        while (argv) {
-            finLine += argv[i];
+        while (i < argc) {
+            finLine += argv[i++];
             finLine += ' ';
         }
         return finLine;
@@ -48,7 +50,7 @@ namespace {
         }
     }
 
-    throwDefaultArgs(int argc) {
+    void throwDefaultArgs(int argc) {
         if (argc != 2) {
             throw std::invalid_argument("No arguments allowed");
         }
@@ -85,7 +87,7 @@ ParsedCommand parseCommandLine(int argc, char* argv[]) {
     std::string argv_str = buildLine(argc, argv);
     switch (command.commandName) {
         case CommandName::Start:
-        case CommandName::AddConfig {
+        case CommandName::AddConfig: {
             throwBadPath(argc);
             auto parsedPath = parseArgumentPath(argv[2]);
             if (command.commandName == CommandName::Start) {
@@ -107,4 +109,15 @@ ParsedCommand parseCommandLine(int argc, char* argv[]) {
             throwDefaultArgs(argc);
             break;
     }
+    return command;
+}
+
+int Application::run() {
+    if (command_.commandName == CommandName::Help) {
+        printHelp();
+    }
+    if (command_.commandName == CommandName::Version) {
+        printVersion();
+    }
+    return 0;
 }
