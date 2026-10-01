@@ -1,5 +1,6 @@
 #include "Application/application.hpp"
 #include "Resources/info.hpp"
+#include "Settings/configLoader.hpp"
 
 #include <string>
 #include <charconv>
@@ -39,14 +40,8 @@ namespace {
     }
 
     void throwBadIndex(int argc) {
-        if (argc < 3) {
+        if (argc < 2 && argc >= 4) {
             throw std::invalid_argument("Bad or empty index");
-        }
-    }
-
-    void throwBadPath(int argc) {
-        if (argc < 3) {
-            throw std::invalid_argument("Bad ot empty path");
         }
     }
 
@@ -87,13 +82,18 @@ ParsedCommand parseCommandLine(int argc, char* argv[]) {
     std::string argv_str = buildLine(argc, argv);
     switch (command.commandName) {
         case CommandName::Start:
+            if (argc != 3) {
+                throw std::invalid_argument("add_cfg accepts at most one path");
+            }
+            command.pathToStart = parseArgumentPath(argv[2]);
+            break;
+        
         case CommandName::AddConfig: {
-            throwBadPath(argc);
-            auto parsedPath = parseArgumentPath(argv[2]);
-            if (command.commandName == CommandName::Start) {
-                command.pathToStart = parsedPath;
-            } else {
-                command.pathToConfig = parsedPath;
+            if (argc > 3) {
+                throw std::invalid_argument("add_cfg accepts at most one path");
+            }
+            if (argc == 3) {
+                command.pathToConfig = parseArgumentPath(argv[2]);
             }
             break;
         }
@@ -113,11 +113,30 @@ ParsedCommand parseCommandLine(int argc, char* argv[]) {
 }
 
 int Application::run() {
-    if (command_.commandName == CommandName::Help) {
-        printHelp();
-    }
-    if (command_.commandName == CommandName::Version) {
-        printVersion();
+    switch (command_.commandName) {
+        case CommandName::Help:
+            printHelp();
+            break;
+        case CommandName::Version:
+            printVersion();
+            break;
+        case CommandName::AddConfig: {
+            Config config{};
+            if (command_.pathToConfig) {
+                config = getConfig(*command_.pathToConfig);
+            }
+            saveConfig(config);
+            std::cout << "Configuration saved\n";
+            break;
+        }
+        case CommandName::CheckConfig: {
+            getConfig();
+            std::cout << "Configuration is valid\n";
+            break;
+        }
+        default:
+            std::cerr << "Command is not implemented yet\n";
+            return 1;
     }
     return 0;
 }
