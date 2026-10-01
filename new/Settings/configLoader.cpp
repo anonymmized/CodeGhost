@@ -21,6 +21,12 @@ Config getConfig(const std::filesystem::path& configPath) {
             throw std::invalid_argument("Unknown setting: " + key);
         }
     }
+    Config config = getConfigFromJson(data);
+    validateConfig(config);
+    return config;
+}
+
+Config getConfigFromJson(const nlohmann::json& data) {
     const auto& recursive = data.at("recursive");
     const auto& ignored = data.at("ignorePaths");
     const auto& interval = data.at("scanInterval");
@@ -34,45 +40,50 @@ Config getConfig(const std::filesystem::path& configPath) {
     if (!interval.is_number_integer()) {
         throw std::invalid_argument("scan_interval_seconds must be an integer");
     }
-
-    if (interval < 1 || interval > 86400) {
-        throw std::invalid_argument("scan_interval_seconds must be between 1 and 86400");
-    }
-
     Config config;
     config.recursive = recursive.get<bool>();
-    config.scanInterval = std::chrono::seconds{interval.get<int>()};
-
+    if (!interval.is_number_unsigned() && interval.get<std::int64_t>() < 0) {
+        throw std::invalid_argument("scanInterval must not be negative");
+    }
+    config.scanInterval = interval.get<std::uint64_t>();
     for (const auto& item : ignored) {
         if (!item.is_string()) {
-            throw std::invalid_argument("Each ignore_paths entry must be a string");
+            throw std::invalid_argument("Each ignorePaths entry must be a string");
         }
-        auto text = item.get<std::string>();
-        if (text.empty()) {
-            throw std::invalid_argument("ignore_paths entries must not be empty");
-        }
-        config.ignorePaths.push_back(std::filesystem::path{text});
+        config.ignorePaths.push_back(item.get<std::filesystem::path>());
     }
     return config;
 }
 
-void saveConfig(const Config& config, const std::filesystem::path& dest) {
+void saveConfig(const Config& config) {
+    validateConfig(config);
     nlohmann::json data;
     data["recursive"] = config.recursive;
-    data["scanInterval"] = config.scanInterval.count();
+    data["scanInterval"] = config.scanInterval;
     data["ignorePaths"] = nlohmann::json::array();
     for (const auto& path : config.ignorePaths) {
         data["ignorePaths"].push_back(path.string());
     }
 
-    std::ofstream configFile(dest);
+    std::ofstream configFile(stdConfigPath);
     if (!configFile.is_open()) {
-        throw std::runtime_error("Cannot open config: " + dest.string());
+        throw std::runtime_error("Cannot open config: " + stdConfigPath.string());
     }
     configFile << data.dump(4) << '\n';
     configFile.close();
 
     if (!configFile) {
-        throw std::runtime_error("Failed to write config: " + dest.string());
+        throw std::runtime_error("Failed to write config: " + stdConfigPath.string());
+    }
+}
+
+void validateConfig(const Config& config) {
+    if (config.scanInterval < 1 || config.scanInterval > 86400) {
+        throw std::invalid_argument("scan_interval_seconds must be between 1 and 86400");
+    }
+    for (const auto& item : config.ignorePaths) {
+        if (item.empty()) {
+            throw std::invalid_argument("Each ignore_paths entry must not be empty");
+        }
     }
 }
