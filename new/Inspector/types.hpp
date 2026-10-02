@@ -1,5 +1,10 @@
 #pragma once
 
+#include <filesystem>
+#include <cstdint>
+#include <string>
+#include <vector>
+
 struct FileRecord {
     std::filesystem::path path;
     std::string contentHash;
