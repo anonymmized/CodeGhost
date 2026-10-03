@@ -40,7 +40,7 @@ namespace {
     }
 
     void throwBadIndex(int argc) {
-        if (argc < 2 && argc >= 4) {
+        if (argc != 3) {
             throw std::invalid_argument("Bad or empty index");
         }
     }
