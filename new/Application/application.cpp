@@ -5,18 +5,10 @@
 #include <string>
 #include <charconv>
 #include <iostream>
+#include <unordered_map>
+#include <stdexcept>
 
 namespace {
-    std::string buildLine(int argc, char* argv[]) {
-        std::string finLine;
-        int i = 0;
-        while (i < argc) {
-            finLine += argv[i++];
-            finLine += ' ';
-        }
-        return finLine;
-    }
-
     std::filesystem::path parseArgumentPath(const std::string& argument) {
         if (argument.empty()) {
             throw std::invalid_argument("There is no target path");
@@ -79,11 +71,10 @@ ParsedCommand parseCommandLine(int argc, char* argv[]) {
         throw std::invalid_argument("Bad argument: " + std::string(argv[1]));
     }
     command.commandName = commandWord->second;
-    std::string argv_str = buildLine(argc, argv);
     switch (command.commandName) {
         case CommandName::Start:
             if (argc != 3) {
-                throw std::invalid_argument("add_cfg accepts at most one path");
+                throw std::invalid_argument("start requires exactly one path");
             }
             command.pathToStart = parseArgumentPath(argv[2]);
             break;

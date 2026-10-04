@@ -27,6 +27,9 @@ std::string HashSession::compute() {
     std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
     unsigned int digestLength = 0;
     if (EVP_DigestFinal_ex(context_.get(), digest.data(), &digestLength) != 1) {
+        throw std::runtime_error("Failed to finalize SHA-256");
+    }
+    if (digestLength != 32) {
         throw std::runtime_error("Unexpected SHA-256 digest length");
     }
     constexpr char hexDigits[] = "0123456789abcdef";
