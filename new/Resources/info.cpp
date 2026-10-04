@@ -3,30 +3,35 @@
 #include <fstream>
 #include <string>
 #include <iostream>
+#include <stdexcept>
 
 void printHelp() {
     std::ifstream helpage("Resources/help.txt");
     if (!helpage.is_open()) {
-        std::cout << "Error: there is no help page\n";
+        throw std::runtime_error("Cannot open Resources/help.txt");
     }
     std::string line;
     while (std::getline(helpage, line)) {
         std::cout << line << '\n';
+    }
+    if (helpage.bad()) {
+        throw std::runtime_error("Failed to read help page");
     }
 }
 
 void printVersion() {
     std::ifstream versionpage("Resources/version.txt");
     if (!versionpage.is_open()) {
-        std::cout << "Error: there is no version page\n";
+        throw std::runtime_error("Cannot open Resources/version.txt");
     }
     std::string line;
-    std::vector<std::string> options;
     while (std::getline(versionpage, line)) {
         size_t equals = line.find('=');
         if (equals != std::string::npos) {
             std::cout << line.substr(0, equals) << ": " << line.substr(equals + 1) << '\n';
         }
-        options.push_back(line);
+    }
+    if (versionpage.bad()) {
+        throw std::runtime_error("Failed to read version page");
     }
 }
