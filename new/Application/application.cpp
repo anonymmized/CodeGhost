@@ -1,6 +1,10 @@
 #include "Application/application.hpp"
 #include "Resources/info.hpp"
 #include "Settings/configLoader.hpp"
+#include "Inspector/scanner.hpp"
+#include "Integrity/integrity.hpp"
+#include "Storage/baselineStorage.hpp"
+#include "Reporting/consoleReporter.hpp"
 
 #include <string>
 #include <charconv>
@@ -9,6 +13,45 @@
 #include <stdexcept>
 
 namespace {
+    int createBaseline(const std::vector<std::filesystem::path>& paths, const std::filesystem::path& baselinePath) {
+        if (paths.empty()) {
+            throw std::invalid_argument("No paths specified for baseline");
+        }
+        const Config config = getConfig();
+        Scanner scanner{config};
+        const ScanPoint scanResult = scanner.scan(paths);
+
+        if (!scanResult.errors.empty()) {
+            printScanErrors(scanResult.errors);
+            return 1;
+        }
+        saveBaseline(baselinePath, scanResult);
+        std::cout << "Baseline saved: " << baselinePath.string() << "\nFiles: " << scanResult.files.size() << '\n';
+        return 0;
+    }
+
+    int checkBaseline(const std::vector<std::filesystem::path>& paths, const std::filesystem::path& baselinePath) {
+        if (paths.empty()) {
+            throw std::invalid_argument("No paths specified for checking");
+        }
+
+        const Config config = getConfig();
+        const auto baseline = loadBaseline(baselinePath);
+
+        Scanner scanner{config};
+        const ScanPoint scanResult = scanner.scan(paths);
+
+        if (!scanResult.errors.empty()) {
+            printScanErrors(scanResult.errors);
+            return 1;
+        }
+        
+        const auto changes = compareBaseline(baseline, scanResult);
+        printChanges(changes);
+
+        return changes.empty() ? 0 : 2;
+    }
+
     std::filesystem::path parseArgumentPath(const std::string& argument) {
         if (argument.empty()) {
             throw std::invalid_argument("There is no target path");

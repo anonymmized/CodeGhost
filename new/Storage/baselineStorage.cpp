@@ -91,13 +91,11 @@ namespace {
         }
     }
 
-    void writeBaselineAtomically(const nlohmann::json& data, const std::filesystem::path& storagePath) {
+    void writeBaselineAutomically(const nlohmann::json& data, const std::filesystem::path& storagePath) {
         const std::string text = data.dump(4) + '\n';
         if (storagePath.empty() || storagePath.native().find('\0') != std::string::npos) {
             throw std::runtime_error("Invalid baseline storage path");
         }
-        // POSIX: create a unique file with mode 0600 and keep its open descriptor.
-        // Reopening it by name would introduce a race with replacement of that file.
         auto tempName = storagePath.string() + ".tmp.XXXXXX";
         const int descriptor = ::mkstemp(tempName.data());
         if (descriptor == -1) {
@@ -147,7 +145,6 @@ void saveBaseline(const std::filesystem::path& storagePath, const ScanPoint& sca
         data["files"][str_path]["size"] = scan.size;
 
         const auto systemTime = std::filesystem::file_time_type::clock::to_sys(scan.modificationTime);
-        // Keep the clock's representation until after the range check (128 bits on macOS).
         using SystemDuration = decltype(systemTime.time_since_epoch());
         using WideNanoseconds = std::chrono::duration<SystemDuration::rep, std::nano>;
         const auto nanoseconds = std::chrono::duration_cast<WideNanoseconds>(systemTime.time_since_epoch()).count();
@@ -159,7 +156,7 @@ void saveBaseline(const std::filesystem::path& storagePath, const ScanPoint& sca
         data["files"][str_path]["permissions"] = static_cast<unsigned int>(scan.permissions);
         validateBaselineEntry(str_path, data["files"][str_path]);
     }
-    writeBaselineAtomically(data, storagePath);
+    writeBaselineAutomically(data, storagePath);
 }
 
 std::vector<FileRecord> loadBaseline(const std::filesystem::path& storagePath) {
@@ -167,8 +164,6 @@ std::vector<FileRecord> loadBaseline(const std::filesystem::path& storagePath) {
     if (!baselinePath.is_open()) {
         throw std::runtime_error("Cannot open file: " + storagePath.string());
     }
-    // The JSON parser normally keeps only the last value for duplicate keys.
-    // Reject them instead, before any baseline entry can be silently overwritten.
     std::vector<std::set<std::string>> objectKeys;
     auto rejectDuplicates = [&objectKeys](int, nlohmann::json::parse_event_t event, nlohmann::json& value) {
         using Event = nlohmann::json::parse_event_t;
